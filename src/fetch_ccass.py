@@ -73,14 +73,22 @@ class ChallengeError(RuntimeError):
 
 def _get(s: requests.Session, url: str, timeout: int = 60) -> str:
     delay = 3.0
+    last = ""
     for attempt in range(3):
         _sleep_rate()
-        r = s.get(url, timeout=timeout)
-        if r.status_code == 200 and len(r.text) > 2000 and "JS required" not in r.text:
-            return r.text
+        try:
+            r = s.get(url, timeout=timeout)
+            html = r.text
+            # 挑戰頁特徵：極短或「JS required」；「有殼冇表」係有效空日
+            challenge = ("JS required" in html) or len(html) < 2000
+            if r.status_code == 200 and not challenge:
+                return html
+            last = f"status={r.status_code} len={len(html)}"
+        except Exception as e:
+            last = f"{type(e).__name__}: {e}"
         time.sleep(delay)
         delay *= 2
-    raise ChallengeError(f"挑戰/失敗: {url[:80]} status={r.status_code} len={len(r.text)}")
+    raise ChallengeError(f"挑戰/失敗: {url[:80]} {last}")
 
 
 def load_issue_ids() -> dict:
@@ -110,7 +118,12 @@ def get_issue_id(s: requests.Session, code: str) -> str:
 def fetch_day(s: requests.Session, issue_id: str, date_iso: str) -> list[dict]:
     """單日持股快照 → [{participant_id,name,shares,pct}]"""
     html = _get(s, f"{BASE}/ccass/choldings.asp?i={issue_id}&d={date_iso}")
-    tables = pd.read_html(io.StringIO(html))
+    try:
+        tables = pd.read_html(io.StringIO(html))
+    except ValueError:
+        return []  # 有效「冇數據」頁（殼有但冇表）
+    if not tables:
+        return []
     big = max(tables, key=len)
     cols = [re.sub(r"\s+", " ", str(c)) for c in big.columns]
     idcol = next((c for c in cols if "CCASS ID" in c), None)

@@ -1,0 +1,8 @@
+C:\Users\klcho\.zcode\workspace\default\hk-placee-registry\src\outcomes.py:43: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  df = pd.concat([df, df2[df.columns]], ignore_index=True)
+目標事件 54 宗（tier=tier2）
+[1/54] 00174 @2026-06-07 抓35/35日
+[2/54] 00302 @2026-04-21 抓0/0日
+[3/54] 00353 @2025-12-24 抓35/35日
+[4/54] 00356 @2026-05-22 抓35/35日
+[5/54] 00451 @2026-04-20 抓0/0日

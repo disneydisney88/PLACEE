@@ -17,7 +17,27 @@
 import csv
 import pathlib
 
+import re
+
 import pandas as pd
+
+try:
+    import opencc
+    _cc = opencc.OpenCC("s2t")
+    def _s2t(s): return _cc.convert(s)
+except Exception:
+    def _s2t(s): return s
+
+RE_HONORIFIC = re.compile(r"(先生|女士|小姐|博士|教授|醫生|律師|太平紳士)$")
+
+
+def name_key(name: str) -> str:
+    """正規化姓名鍵：繁體＋去稱謂＋去空白（規格§九.3：統一轉繁體，原文另存）"""
+    if not isinstance(name, str):
+        return ""
+    s = _s2t(name.strip())
+    s = RE_HONORIFIC.sub("", s)
+    return re.sub(r"\s+", "", s)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
@@ -127,9 +147,15 @@ def main():
     print(alert_df[alert_df['alert_score'] >= 3][
         ['stock_code', 'stock_name', 'ann_date', 'alert_score']].to_string(index=False))
 
-    # ---- repeat_placees.csv（同名候選清單，唔自動合併——規格§九.4）
-    named = pl[pl["placee_name"].notna() & (pl["placee_name"] != "")]
-    grp = named.groupby("placee_name").agg(
+    # ---- repeat_placees.csv（同名候選，規格§九.3/§九.4）
+    # name_key=繁體＋去稱謂（付尚輝/付尚輝先生→同一鍵）；原文不變另存name_variants
+    named = pl[pl["placee_name"].notna() & (pl["placee_name"] != "")].copy()
+    named["name_key"] = named["placee_name"].map(name_key)
+    named["case_tag"] = named["case_tag"].fillna(
+        named["stock_code"] + "@" + named["ann_date"].astype(str))
+    grp = named.groupby("name_key").agg(
+        placee_name=("placee_name", "first"),
+        name_variants=("placee_name", lambda x: "; ".join(sorted(set(x)))),
         n_stocks=("stock_code", "nunique"),
         n_events=("event_id", "nunique"),
         placee_type=("placee_type", lambda x: "/".join(sorted(set(x.dropna())))),
@@ -138,6 +164,7 @@ def main():
     ).reset_index()
     grp = grp[grp["n_stocks"] >= 2].sort_values(
         ["n_stocks", "placee_name"], ascending=[False, True])
+    grp = grp.drop(columns=["name_key"])
     grp.to_csv(DATA / "repeat_placees.csv", index=False, encoding="utf-8-sig")
     print(f"repeat_placees.csv: {len(grp)}個跨股姓名（候選，需人手判斷）", flush=True)
     if len(grp):
