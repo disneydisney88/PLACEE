@@ -36,7 +36,9 @@ FLAG_FILE = CKPT / "NEED_COOKIE.flag"
 STATE_FILE = CKPT / "ccass_state.json"
 
 BASE = "https://webb-database.com"
-MIN_INTERVAL = 1.6
+# 2026-09-18晚：1.6s抓約2,600請求後被webb硬403（IP封鎖約數小時）。
+# 禮貌上限改3.0s；解封後由checkpoint續跑（規格§一.5：唔用代理繞過）。
+MIN_INTERVAL = 3.0
 
 RETAIL_WHITELIST = {
     "B01955": "富途", "B01668": "耀才", "B02159": "盈立", "B02142": "老虎",

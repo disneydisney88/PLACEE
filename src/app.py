@@ -134,8 +134,15 @@ def page_name():
     st.caption("由承配人姓名反查全部歷史個案（同名只係候選，唔代表同一人）")
     placees = load_placees()
     names = (placees["placee_name"].dropna().sort_values().unique().tolist())
+    # 支援URL參數：?name=付尚輝 （可分享搜尋連結）
+    qp_name = ""
+    try:
+        qp = dict(st.query_params)
+        qp_name = str(qp.get("name", "") or "")
+    except Exception:
+        pass
     q = st.text_input("姓名（支援部分匹配）", key="name_q",
-                      placeholder="例：付尚輝")
+                      value=qp_name, placeholder="例：付尚輝")
     pick = st.selectbox("…或者直接揀", [""] + names,
                         format_func=lambda x: x or "—")
     df = placees[placees["placee_name"].notna()]
