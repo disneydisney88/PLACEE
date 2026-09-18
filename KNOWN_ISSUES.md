@@ -15,6 +15,10 @@
 
 ## 已知解析盲點
 
+0. **逐名%表格抽取盲點**（Claude覆核後新增）：86宗具名事件重解析證實——公告逐名認購%幾乎全部以**表格**呈現（認購人|股數|%），顯式句子regex抓唔到，故`pct_enlarged_source`得COMPUTED或NULL、EXPLICIT=0。R2a/b/c新規則只食EXPLICIT→支援度=0，命中者降級`R2_candidate`（02113在列）。**修法**：pdfplumber extract_table按「標籤行→同行數字欄」配對，下一輪做。
+0b. **R4/R8已踢出alert_score**（rule_validation.md實證：R4 lift=0.55、R8 lift≈1——貼折讓底係殼股市場常規、低成交係背景條件）。新評分只計R1＋R2系列＋R7（高lift觸發訊號），高度警示門檻改≥2。R4/R8布林欄保留做參考。
+0c. **disclosure_check.csv嘅「真漏候選」係過度標記**：00139抽查實證——輸入CSV配售代理欄唔可靠（'-'唔代表直接認購）；抽查個案公告嘅承配人定義真係泛稱。60宗候選只作篩選清單，唔係已證實漏抓。可靠嘅漏抓偵測要靠DI存在性反查（Phase 4.5，未做）。
+
 1. **泛稱承配人定義（NO_NAMED_PLACEE）**：經紀配售公告好常見「承配人指配售代理促成之任何投資者」——公告本來就冇名。呢類行係誠實輸出，唔係抓漏。比例見`parser_report.md`。
 2. **雙欄釋義表錯位**：pdftotext -layout會交錯欄位（08245實例）。已用質素評分自動轉pdfplumber重抽；極端排版仍可能錯配，凡經pdfplumber後備者`parse_confidence`最高只會MED（pdfplumber純文字流冇表格框線做驗證）。
 3. **「認購人A」由「由XXX女士全資擁有」定義**：公司名正確入`placee_name`、擁有人入`beneficial_owner`；但若公告冇寫公司名（只寫「由XXX女士（全資）擁有之公司」），`placee_name`=空＋UNKNOWN——未經証實嘅實體名唔會虛構。
