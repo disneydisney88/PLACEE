@@ -121,8 +121,9 @@ def select_pdfs(rows: list[dict]) -> dict:
 
 
 def ann_date_from_row(r: dict) -> str | None:
+    # DATE_TIME 帶時間尾注（"12/06/2026 17:26"），只取日期部分
     try:
-        return dt.datetime.strptime(r['date'], '%d/%m/%Y').date().isoformat()
+        return dt.datetime.strptime(r['date'][:10], '%d/%m/%Y').date().isoformat()
     except Exception:
         return None
 
@@ -283,7 +284,10 @@ def process_event(ev: dict, state: dict, dry: bool = False) -> list[dict]:
                          'placee_type': pr['placee_type'],
                          'beneficial_owner': pr['beneficial_owner'],
                          'shares': sh, 'price': price, 'price_source': price_source,
-                         'pct_enlarged': pct, 'below_5pct': below5,
+                         'pct_enlarged': pct,
+                         'pct_enlarged_source': ('EXPLICIT' if (pct is not None and not derived)
+                                                 else ('COMPUTED' if derived else None)),
+                         'below_5pct': below5,
                          'independent_declared': pr['independent_declared'],
                          'snippet': snip,
                          'parse_confidence': 'MED' if (derived or not sh) else conf,

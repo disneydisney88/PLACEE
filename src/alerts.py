@@ -83,16 +83,46 @@ def load_inputs():
     return pl, oc, wf
 
 
-def rule_r2(group: pd.DataFrame):
+def rule_r2_family(group: pd.DataFrame):
+    """Claude覆核修正：R2拆三條，只食EXPLICIT來源pct（COMPUTED→R2_candidate）。
+
+    R2a 貼線：任何單一個人承配人 4.0%<=pct<5.0%（n=1都中）
+    R2b 均等：n>=2個人 AND cv=std/mean<0.05 AND max<5%
+    R2c 隱形集合：sum(個人pct)>=10% AND 每個<5%
+    回傳 (r2a, r2b, r2c, r2_candidate_computed, note)
+    """
     g = group[group["placee_type"] == "個人"]
-    if len(g) < 3:
-        return False, None
-    pcts = g["pct_enlarged"]
-    if pcts.isna().any():
-        return False, None  # 有承配人冇%數據 → 唔可以證實均等
-    if pcts.max() < 5.0 and pcts.std(ddof=0) < 0.1:
-        return True, f"{len(g)}名個人, max={pcts.max():.2f}%, std={pcts.std(ddof=0):.3f}"
-    return False, None
+    if g.empty:
+        return False, False, False, False, None
+    has_computed = (group.get("pct_enlarged_source") == "COMPUTED").any() \
+        if "pct_enlarged_source" in group.columns else False
+
+    def _pcts(df):
+        p = df[(df["pct_enlarged"].notna())]
+        if "pct_enlarged_source" in df.columns:
+            p = p[p["pct_enlarged_source"] == "EXPLICIT"]
+        return p["pct_enlarged"].astype(float)
+
+    p = _pcts(g)
+    r2a = bool(((p >= 4.0) & (p < 5.0)).any()) if len(p) else False
+    r2b = False
+    if len(p) >= 2:
+        mean = p.mean()
+        if mean > 0 and p.max() < 5.0 and (p.std(ddof=0) / mean) < 0.05:
+            r2b = True
+    r2c = bool(len(p) and p.max() < 5.0 and p.sum() >= 10.0)
+    # COMPUTED pct 命中任何形態 → 只做候選，唔入 alert_score
+    cand = False
+    if has_computed:
+        pc = g[g["pct_enlarged"].notna()]["pct_enlarged"].astype(float)
+        cand = bool(len(pc) and (
+            ((pc >= 4.0) & (pc < 5.0)).any()
+            or (len(pc) >= 2 and pc.max() < 5.0
+                and pc.mean() > 0 and pc.std(ddof=0) / pc.mean() < 0.05)
+            or (pc.max() < 5.0 and pc.sum() >= 10.0)))
+    note = (f"n={len(p)} explicit" if (r2a or r2b or r2c) else
+            ("COMPUTED pct命中(候選)" if cand else None))
+    return r2a, r2b, r2c, cand, note
 
 
 def main():
@@ -104,12 +134,28 @@ def main():
     satellite_stocks = set(wf[wf["flag_level"] == "衛星倉派貨"]["stock_code"]) if len(wf) else set()
     oc_by = {(r["stock_code"], r["ann_date"]): r for _, r in oc.iterrows()}
 
+    # 披露類型分類（Claude覆核Q1）：DIRECT_SUBSCRIPTION / AGENT_SOURCED /
+    # NONE(代價發行結構上無承配人) / NO_DEF
+    def disclosure_type(eid: str) -> str:
+        g = pl[pl["event_id"] == eid]
+        if g["placee_name"].notna().any() and (g["placee_name"] != "").any():
+            return "DIRECT_SUBSCRIPTION"
+        fr = g["fail_reason"].fillna("").astype(str)
+        if fr.str.contains("NO_NAMED_PLACEE").any():
+            return "AGENT_SOURCED"
+        if fr.str.contains("NO_PLACEE_DEF").any():
+            return "NO_DEF"
+        return "UNKNOWN"
+
+    ev = ev.copy()
+    ev["placee_disclosure_type"] = ev["event_id"].map(disclosure_type)
+
     rows = []
     for _, e in ev.iterrows():
         code, ann = e["stock_code"], e["ann_date"]
         g = pl[(pl["stock_code"] == code) & (pl["ann_date"] == ann)]
         o = oc_by.get((code, ann), {})
-        r2_hit, r2_note = rule_r2(g)
+        r2a, r2b, r2c, r2cand, r2_note = rule_r2_family(g)
 
         r4 = None
         price = o.get("price_base_prev")
@@ -122,11 +168,21 @@ def main():
         med = o.get("turnover_median_prev90")
         if med is not None and not pd.isna(med):
             r8 = bool(float(med) < 500_000)
+        # alert_score 只計高lift觸發訊號（rule_validation.md實證：R4 lift=0.55、
+        # R8 lift≈1 為背景條件，按Claude覆核準則踢出評分，保留欄位做參考）
+        score_terms = (code in combo_stocks, r2a, r2b, r2c,
+                       code in satellite_stocks)
         rows.append({
+            "event_id": e["event_id"],
             "stock_code": code, "stock_name": e["stock_name"],
             "ann_date": ann, "ann_type": e["ann_type"], "mandate": e["mandate"],
+            "placee_disclosure_type": e["placee_disclosure_type"],
             "R1_combo_bsgs": code in combo_stocks,
-            "R2_equal_small_individuals": r2_hit, "R2_note": r2_note,
+            "R2a_near_5pct": r2a,
+            "R2b_equal_split": r2b,
+            "R2c_hidden_pool": r2c,
+            "R2_candidate_computed_pct": r2cand,
+            "R2_note": r2_note,
             "R3_offchain_block_25_30": NOT_TESTED,
             "R4_price_at_20pct_floor": r4,
             "R5_insider_sell_high": NOT_TESTED,
@@ -134,9 +190,7 @@ def main():
             "R7_satellite_dump": code in satellite_stocks,
             "R8_low_turnover_shell": r8,
             "R9_auction_anomaly": NOT_TESTED,
-            "alert_score": sum(1 for v in (
-                code in combo_stocks, r2_hit, r4 if r4 is not None else False,
-                code in satellite_stocks, r8 if r8 is not None else False) if v),
+            "alert_score": sum(1 for v in score_terms if v),
             "n_placee_rows": len(g),
             "n_named_placees": int(g["placee_name"].notna().sum()),
             "price": price_ann if len(base) else None,
@@ -147,10 +201,48 @@ def main():
     alert_df = alert_df.sort_values(["alert_score", "stock_code"],
                                     ascending=[False, True])
     alert_df.to_csv(DATA / "alerts.csv", index=False, encoding="utf-8-sig")
-    print(f"alerts.csv: {len(alert_df)}事件，高度警示(>=3)："
-          f"{int((alert_df['alert_score'] >= 3).sum())}", flush=True)
-    print(alert_df[alert_df['alert_score'] >= 3][
-        ['stock_code', 'stock_name', 'ann_date', 'alert_score']].to_string(index=False))
+    n_hi = int((alert_df['alert_score'] >= 2).sum())
+    print(f"alerts.csv: {len(alert_df)}事件，"
+          f"高度警示(>=2，只計R1/R2/R7高lift訊號)：{n_hi}", flush=True)
+    print(alert_df[alert_df['alert_score'] >= 2][
+        ['stock_code', 'stock_name', 'ann_date', 'alert_score',
+         'R1_combo_bsgs', 'R7_satellite_dump', 'R2_candidate_computed_pct']].to_string(index=False))
+    dt_dist = alert_df['placee_disclosure_type'].value_counts().to_dict()
+    print(f"披露類型分佈：{dt_dist}", flush=True)
+    direct = alert_df[alert_df['placee_disclosure_type'] == 'DIRECT_SUBSCRIPTION']
+    if len(direct):
+        print(f"DIRECT_SUBSCRIPTION覆蓋KPI（規格§八.1意義上）："
+              f"{len(direct)}宗", flush=True)
+
+    # ---- 披露一致性交叉驗證（Claude覆核Q1第2條）：輸入CSV授權/代理 vs 解析結果
+    try:
+        import fetch_hkex as fh
+        ev_input = {e['event_id']: e for e in fh.load_events()}
+        checks = []
+        for _, e in alert_df.iterrows():
+            src = ev_input.get(e['event_id'])
+            if not src:
+                continue
+            csv_agent = (src.get('agent_input') or '').strip()
+            csv_direct_like = (csv_agent in ('', '-')) and \
+                '代價' not in (src.get('ann_type_input') or '')
+            checks.append({
+                'event_id': e['event_id'], 'stock_code': e['stock_code'],
+                'csv_agent': csv_agent,
+                'csv_direct_like': csv_direct_like,
+                'parsed_disclosure_type': e['placee_disclosure_type'],
+                'mismatch': bool(csv_direct_like and
+                                 e['placee_disclosure_type'] == 'AGENT_SOURCED'),
+            })
+        ck = pd.DataFrame(checks)
+        ck.to_csv(DATA / 'disclosure_check.csv', index=False,
+                  encoding='utf-8-sig')
+        n_mis = int(ck['mismatch'].sum()) if len(ck) else 0
+        print(f"disclosure_check.csv：{len(ck)}宗，"
+              f"CSV話直接認購但解析得泛稱（真漏候選）={n_mis}宗",
+              flush=True)
+    except Exception as e:
+        print(f"disclosure_check略過：{e}", flush=True)
 
     # ---- repeat_placees.csv（同名候選，規格§九.3/§九.4）
     # name_key=繁體＋去稱謂（付尚輝/付尚輝先生→同一鍵）；原文不變另存name_variants

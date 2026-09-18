@@ -18,11 +18,19 @@ DATA = ROOT / "data"
 
 
 def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--type', default='配股', help='配股/供股/全部')
+    ap.add_argument('--n', type=int, default=30)
+    args = ap.parse_args()
+
     pl = pd.read_csv(DATA / "placees.csv", dtype={"stock_code": str},
                      encoding="utf-8-sig")
     named = pl[pl["placee_name"].notna() & (pl["placee_name"] != "")]
+    if args.type != '全部':
+        named = named[named["event_id"].str.startswith(args.type)]
     events = named.drop_duplicates(subset=["stock_code", "ann_date"])
-    sample = events.sample(n=min(30, len(events)), random_state=42)
+    sample = events.sample(n=min(args.n, len(events)), random_state=42)
 
     rows = []
     n_name_ok = n_name_checked = n_shares_ok = n_shares_checked = 0
@@ -52,12 +60,11 @@ def main():
     df = pd.DataFrame(rows)
     acc_name = n_name_ok / max(n_name_checked, 1)
     acc_shares = n_shares_ok / max(n_shares_checked, 1)
-    with open(ROOT / "parser_report.md", "w", encoding="utf-8") as f:
-        f.write("# parser_report.md — 承配人抽取抽樣驗證\n\n")
-        f.write(f"抽樣：{len(sample)}宗事件（seed=42）、{len(df)}行承配人記錄\n\n")
+    suffix = '' if args.type == '配股' else f'_{args.type}'
+    with open(ROOT / "parser_report.md", "a", encoding="utf-8") as f:
+        f.write(f"\n\n# 抽樣驗證附錄：{args.type}（{len(sample)}宗 seed=42）\n\n")
         f.write(f"- 姓名一致性（name出現於該行snippet）：{n_name_ok}/{n_name_checked} = {acc_name:.1%}\n")
         f.write(f"- 股數格式（正整數）：{n_shares_ok}/{n_shares_checked} = {acc_shares:.1%}\n\n")
-        f.write("逐條人工複核表（agent對snippet核對姓名/股數/標籤）：\n\n")
         for _, r in df.iterrows():
             f.write(f"### {r['stock_code']} {r['stock_name']} @ {r['ann_date']}\n")
             f.write(f"- label={r['label']} name={r['name']} shares={r['shares']} "
@@ -66,7 +73,7 @@ def main():
             f.write(f"- snippet: {r['snippet']}\n\n")
     print(f"樣本{len(sample)}事件/{len(df)}行；姓名一致性{acc_name:.1%}；"
           f"股數格式{acc_shares:.1%}", flush=True)
-    print("→ parser_report.md", flush=True)
+    print("→ parser_report.md（附錄）", flush=True)
 
 
 if __name__ == "__main__":
