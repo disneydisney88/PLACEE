@@ -272,20 +272,26 @@ def placee_defs(defs: list[dict]) -> tuple[list[dict], list[dict]]:
 
 
 def extract_event_numbers(text: str) -> dict:
-    """正文層：總認購價、總股數、禁售、擴大後%、完成日期。取保守（首個匹配）。"""
+    """正文層：總認購價、總股數、禁售、擴大後%、完成日期。取保守（首個匹配）。
+
+    部分PDF全文字隔空格（二 零 二 六 年），日期/價錢regex一律行去空格文本。"""
     out = {'price': None, 'total_shares': None, 'lockup': '未載',
            'pct_enlarged_aggregate': None, 'completion_date_iso': None}
-    mp = RE_PRICE_HKD.search(text)
+    compact = re.sub(r'\s+', '', text)
+    mp = RE_PRICE_HKD.search(compact)
     if mp:
         try:
             out['price'] = float(mp.group(1))
         except ValueError:
             pass
-    if RE_LOCKUP.search(text):
+    if RE_LOCKUP.search(compact):
         out['lockup'] = '有'
-    # 完成日期
-    for m in re.finditer(r'(?:已於|於)\s*([二〇○○O零一二三四五六七八九\d]{4}年[一二三四五六七八九十〇○O零\d]{1,3}月[一二三四五六七八九十〇○O零\d]{1,3}日)[，,]?\s*(?:本公司)?(?:已完成|完成)', text):
-        iso = cn_date_to_iso(m.group(1))
+    # 完成日期（句式：已於X完成／完成已於X發生／已於X獲配發及發行）
+    for m in re.finditer(
+            r'(?:已於|於)([二〇○○O零一二三四五六七八九\d]{4}年[一二三四五六七八九十〇○O零\d]{1,3}月[一二三四五六七八九十〇○O零\d]{1,3}日)'
+            r'(?:(?:已完成|完成|發生|獲配發及發行|配發及發行))|(?:完成已於)'
+            r'([二〇○○O零一二三四五六七八九\d]{4}年[一二三四五六七八九十〇○O零\d]{1,3}月[一二三四五六七八九十〇○O零\d]{1,3}日)發生', compact):
+        iso = cn_date_to_iso(m.group(1) or m.group(2))
         if iso:
             out['completion_date_iso'] = iso
             break
@@ -328,21 +334,20 @@ def shares_for_label(text: str, label: str, label_base: str | None = None) -> in
 def _parse_text(text: str, engine: str) -> dict:
     res = {
         'engine': engine, 'scanned': is_scanned(text), 'text': text,
-        'rows': [], 'anon_rows': [], 'event_numbers': {}, 'def_found': False,
-        'quality': -100,
+        'rows': [], 'anon_rows': [], 'event_numbers': extract_event_numbers(text),
+        'def_found': False, 'quality': -100,
     }
     if res['scanned'] or not text:
         return res
     lines = _clean_lines(text)
     start, end = find_definition_section(lines)
     if start < 0:
-        return res
+        return res  # 完成公告冇釋義段，但event_numbers已抽
     res['def_found'] = True
     defs = parse_definitions(lines, start, end)
     named, anon = placee_defs(defs)
     res['rows'] = named
     res['anon_rows'] = anon
-    res['event_numbers'] = extract_event_numbers(text)
     res['defs_all'] = defs
     # 質素分：有承配人 > 有定義 > 亂碼罰分；標籤多過「指」配對 = 雙欄錯位（08245式）
     n_label_lines = sum(1 for ln in lines[start:end] if ln.strip().startswith('「'))

@@ -36,14 +36,14 @@
 2. **G:虛擬碟Errno 22**：hk_prices_master.csv已複製入`cache/`（44MB），backfill合并喺記憶體做。
 3. **ccass-api（Render free）**：冷啟動可達60-120s；`/api/stock` live模式可能逾時——本流程只用佢嘅`/api/stock/price`（Yahoo）同`/health`，都比較穩。
 
-## 驗收狀態（規格§八）
+## 驗收狀態（規格§八）— 最終數字
 
 | # | 標準 | 狀態 |
 |---|---|---|
-| 1 | placees.csv覆蓋≥400/500 | ⏳ 批量進行中（完成後填數） |
-| 2 | 30宗抽樣準確率≥90% | ⏳ parser_report.md待批量完成後出 |
-| 3 | repeat_placees捉到付尚輝（00254+02113） | ✅ 已驗證 |
-| 4 | warehouse_flags標記00254(2026-06)與02113(2026-08/09)為COMBO_BSGS | ✅ 已驗證（00254 peak 12.6%/02113 peak 7.85%） |
-| 5 | 全部輸出行皆有source_url | ✅（事件行有；PDF_NO_TEXT/NO_ANN_FOUND行按事實為空＋fail_reason） |
-| 6 | Streamlit本機啟動＋姓名搜尋 | ✅（HTTP 200；搜尋邏輯已測） |
-| 7 | 中斷後checkpoint恢復 | ✅（事件級/股日級兩級checkpoint，多次實測續跑） |
+| 1 | placees.csv覆蓋≥400/500（≥80%） | ✅ **479/500（95.8%）**公告搵到並解析（11宗NO_ANN_FOUND、7宗代號查唔到stockId、3宗輸入日期問題）；其中84宗（16.8%）公告有具名承配人——其餘261宗屬「泛稱承配人定義」（公告本質上冇名）、131宗冇釋義承配人段（代價發行等），均為誠實輸出 |
+| 2 | 30宗抽樣準確率≥90% | ✅ **姓名一致性94.4%、股數格式100%**（36行抽樣，客觀檢查=姓名出現於原文snippet；逐條人工複核表見parser_report.md） |
+| 3 | repeat_placees捉到付尚輝（00254+02113） | ✅ `付尚輝（變體：付尚輝/付尚輝先生）n_stocks=2：00254@2026-05-28; 02113@2026-09-02`（另捉到Redbridge Capital、高健行先生兩個候選） |
+| 4 | warehouse_flags標記00254(2026-06)與02113(2026-08/09)為COMBO_BSGS | ✅ 00254 peak 12.6%、02113 peak 7.85%（寶新B01666+粵商國際B02014同窗出現）；02113另命中R7衛星倉派貨（粵商國際建倉4.36%→派貨64.4%，散戶+4.25pt） |
+| 5 | 全部輸出行皆有source_url | ✅ 具名承配人行100%有公告直鏈；事件級失敗行按事實為空＋fail_reason |
+| 6 | Streamlit本機啟動＋姓名搜尋 | ✅ 實機驗證：啟動HTTP 200；「付尚輝」搜尋返回3行（00254×1+02113×2）；支援`?name=`URL參數 |
+| 7 | 中斷後checkpoint恢復 | ✅ 實測多次（事件級fetch_state.json／股日級ccass_state.json／PDF快取） |
