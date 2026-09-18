@@ -1,7 +1,13 @@
 cache/
-checkpoints/stock_ids.json
+checkpoints/
+*.log
+.env
+secrets/
+.streamlit/secrets.toml
 __pycache__/
 *.pyc
+.venv/
 data/input/*.csv
 data/input/*.xlsx
 !data/input/.gitkeep
+data/price_backfill.csv

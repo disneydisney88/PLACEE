@@ -1,0 +1,6 @@
+# pipeline（本機抓取/解析/建庫用）——雲端app唔使裝
+pdfplumber>=0.10
+lxml>=4.9
+scipy>=1.11
+tabulate>=0.9
+# 外部工具：pdftotext（poppler-utils）需喺PATH（Windows: poppler-windows）

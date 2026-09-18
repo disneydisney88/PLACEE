@@ -1,7 +1,5 @@
-pandas>=2.0
+# app 運行所需（Streamlit Cloud）
 streamlit>=1.40
-pdfplumber>=0.10
-requests>=2.31
-lxml>=4.9
+pandas>=2.0
 opencc-python-reimplemented>=0.1.7
-# 外部工具依賴：pdftotext（poppler-utils）需喺PATH（Windows: poppler-windows）
+requests>=2.31

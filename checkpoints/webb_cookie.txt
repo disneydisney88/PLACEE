@@ -1,2 +1,0 @@
-Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) ZCode/3.11.2 Chrome/146.0.7680.80 Electron/41.0.3 Safari/537.36
-ayuus=07e4df1b92026d69917f0053e741c588
