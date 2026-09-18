@@ -1,0 +1,7 @@
+cache/
+checkpoints/stock_ids.json
+__pycache__/
+*.pyc
+data/input/*.csv
+data/input/*.xlsx
+!data/input/.gitkeep
