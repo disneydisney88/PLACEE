@@ -51,3 +51,19 @@
 | 5 | 全部輸出行皆有source_url | ✅ 具名承配人行100%有公告直鏈；事件級失敗行按事實為空＋fail_reason |
 | 6 | Streamlit本機啟動＋姓名搜尋 | ✅ 實機驗證：啟動HTTP 200；「付尚輝」搜尋返回3行（00254×1+02113×2）；支援`?name=`URL參數 |
 | 7 | 中斷後checkpoint恢復 | ✅ 實測多次（事件級fetch_state.json／股日級ccass_state.json／PDF快取） |
+  File "<stdin>", line 6
+    | webb-database.com＋Python requests | ❌ TLS指紋封鎖（JA3） | cookie正確仍403；curl同樣403；瀏覽器同IP同時正常 |
+                       ^
+SyntaxError: invalid character '＋' (U+FF0B)
+
+## webb鏡像封鎖狀態實錄（2026-09-19凌晨）
+
+| 通道 | 狀態 | 證據 |
+|---|---|---|
+| webb-database.com＋Python requests | ❌ TLS指紋封鎖（JA3） | cookie正確仍403；curl同樣403；瀏覽器同IP同時正常 |
+| webb-database.com 頁內fetch/XHR | ❌ Sec-Fetch-Dest封鎖 | JS無法覆寫Sec-Fetch-*；只有document導航放行 |
+| 瀏覽器導航 | 🟡 有限額 | 可用約半小時（~200請求）之後軟封鎖：回應得120-500字節空殼無表 |
+| 0xmd鏡像（webbsite.0xmd.com） | 🟡 同上 | 「请稍候」挑戰瀏覽器可過；Python仍TLS 403；URL改寫為 choldings?i=（無.asp）但.asp連d=參數可用 |
+
+**Tier-2餘額（528日期）**：工作清單 `cache/ccass/remaining_work.json`（按crash個案→repeat姓名→其餘排序）；
+自動化每50分鐘一輪：瀏覽器測解封→解封就用導航批量抓→`ingest_browser_results.py`併入→全部完成自動跑下游＋commit＋自我刪除。

@@ -383,6 +383,44 @@ def parse_announcement(pdf_path: pathlib.Path) -> dict:
     return res
 
 
+def extract_table_pcts(pdf_path, labels: list[str]) -> dict:
+    """由公告頁面（pdfplumber extract_words按視覺行重組）抽逐名認購%。
+
+    呢類公告嘅「表格」冇框線，extract_tables抓唔到；改用詞座標：
+    同一視覺行（top±2pt）內有label → 取該行最後一個%（擴大後%慣常排最右）。
+    回傳 {label去空格: pct}。
+    """
+    import pdfplumber
+    out = {}
+    if not labels:
+        return out
+    lab_keys = [re.sub(r'\s+', '', lab) for lab in labels]
+    try:
+        with pdfplumber.open(str(pdf_path)) as pdf:
+            for page in pdf.pages:
+                words = page.extract_words() or []
+                lines = {}
+                for w in words:
+                    key = round(w['top'] / 2.5)
+                    lines.setdefault(key, []).append(w)
+                for _, ws in lines.items():
+                    ws.sort(key=lambda w: w['x0'])
+                    line = ''.join(w['text'] for w in ws)
+                    for lab_c in lab_keys:
+                        if lab_c in out or lab_c not in line:
+                            continue
+                        # 排除釋義定義行（「label」指 開頭嘅body行）
+                        if '」' in line and line.index(lab_c) > line.find('」'):
+                            pass  # 定義行body都可能含%，仍接受但排最後
+                        ms = re.findall(r'(\d{1,2}(?:\.\d+)?)%', line)
+                        vals = [float(x) for x in ms if 0 < float(x) <= 100]
+                        if vals:
+                            out[lab_c] = vals[-1]
+    except Exception:
+        pass
+    return out
+
+
 def snippet_from(text: str, name: str, limit: int = 200) -> str:
     """搵姓名首次出現處，切出<=200字上下文片段。"""
     if not name:

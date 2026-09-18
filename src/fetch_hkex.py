@@ -264,25 +264,33 @@ def process_event(ev: dict, state: dict, dry: bool = False) -> list[dict]:
                  'fail_reason': 'NO_NAMED_PLACEE(泛稱定義冇具名)'}]
 
     enlarged_total = nums.get('enlarged_issued_total')
+    # 表格抽取逐名%（Claude覆核二·#6：EXPLICIT救活R2）
+    label_list = [pr['placee_label'] for pr in src['rows']]
+    table_pcts = pd.extract_table_pcts(src.get('pdf'), label_list) if label_list else {}
     rows_out = []
     for pr in src['rows']:
         sh = label_shares(pr['placee_label'])
         pct = None
         pct_source = None
-        mpct = re.search(
-            re.escape(pr['placee_label'].replace(' ', '')) +
-            r'[^。\n]{0,200}?擴大後[^。\n]{0,60}?約?\s*([\d.]+)\s*%', text)
-        if mpct:
-            pct = float(mpct.group(1))
+        tbl_pct = table_pcts.get(pr['placee_label'].replace(' ', ''))
+        if tbl_pct is not None:
+            pct = tbl_pct
             pct_source = 'EXPLICIT'
-        elif sh and enlarged_total and enlarged_total > 0 and sh <= enlarged_total:
-            # 股數÷公告載明擴大後股本：純除法零誤差（Claude覆核二·#3）
-            pct = round(sh / enlarged_total * 100, 2)
-            pct_source = 'EXACT_COMPUTED'
-        elif sh and total_shares and agg_pct:
-            # 總%×個股/總股數：受總%四捨五入影響（±0.05pt）
-            pct = round(agg_pct * sh / total_shares, 2)
-            pct_source = 'ESTIMATED'
+        else:
+            mpct = re.search(
+                re.escape(pr['placee_label'].replace(' ', '')) +
+                r'[^。\n]{0,200}?擴大後[^。\n]{0,60}?約?\s*([\d.]+)\s*%', text)
+            if mpct:
+                pct = float(mpct.group(1))
+                pct_source = 'EXPLICIT'
+            elif sh and enlarged_total and enlarged_total > 0 and sh <= enlarged_total:
+                # 股數÷公告載明擴大後股本：純除法零誤差（Claude覆核二·#3）
+                pct = round(sh / enlarged_total * 100, 2)
+                pct_source = 'EXACT_COMPUTED'
+            elif sh and total_shares and agg_pct:
+                # 總%×個股/總股數：受總%四捨五入影響（±0.05pt）
+                pct = round(agg_pct * sh / total_shares, 2)
+                pct_source = 'ESTIMATED'
         below5 = (None if pct is None else (pct < 5.0))
         snip = pd.snippet_from(text, pr['placee_name']) if pr['placee_name'] else ''
         rows_out.append({**base,
