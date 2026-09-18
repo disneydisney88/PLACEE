@@ -276,7 +276,8 @@ def extract_event_numbers(text: str) -> dict:
 
     部分PDF全文字隔空格（二 零 二 六 年），日期/價錢regex一律行去空格文本。"""
     out = {'price': None, 'total_shares': None, 'lockup': '未載',
-           'pct_enlarged_aggregate': None, 'completion_date_iso': None}
+           'pct_enlarged_aggregate': None, 'completion_date_iso': None,
+           'enlarged_issued_total': None}
     compact = re.sub(r'\s+', '', text)
     mp = RE_PRICE_HKD.search(compact)
     if mp:
@@ -286,6 +287,13 @@ def extract_event_numbers(text: str) -> dict:
             pass
     if RE_LOCKUP.search(compact):
         out['lockup'] = '有'
+    # 擴大後已發行股本絕對數（Claude覆核二·#3：EXACT_COMPUTED分母）
+    m = re.search(r'擴大後[^。\n]{0,50}?已發行股本(?:總數)?(?:約|為|共)?([\d,]{6,})股', compact)
+    if m:
+        try:
+            out['enlarged_issued_total'] = int(m.group(1).replace(',', ''))
+        except ValueError:
+            pass
     # 完成日期（句式：已於X完成／完成已於X發生／已於X獲配發及發行）
     for m in re.finditer(
             r'(?:已於|於)([二〇○○O零一二三四五六七八九\d]{4}年[一二三四五六七八九十〇○O零\d]{1,3}月[一二三四五六七八九十〇○O零\d]{1,3}日)'

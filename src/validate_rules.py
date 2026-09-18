@@ -51,6 +51,39 @@ def lift_table(alerts: pd.DataFrame, outcomes: pd.DataFrame,
     return pd.DataFrame(rows)
 
 
+def continuous_table(alerts: pd.DataFrame, outcomes: pd.DataFrame) -> pd.DataFrame:
+    """連續outcome檢定（Claude覆核二·#4）：規則命中組 vs 未命中組
+    ret_ann_90 / max_drawdown_90 中位數差＋Mann-Whitney U（二元crash太稀疏）。"""
+    from scipy.stats import mannwhitneyu
+    keep = ["stock_code", "ann_date"] + [c for c in RULE_COLS if c in alerts.columns]
+    m = alerts[keep].merge(
+        outcomes[["stock_code", "ann_date", "ret_ann_90", "max_drawdown_90"]],
+        on=["stock_code", "ann_date"], how="left")
+    rows = []
+    for col, label in RULES:
+        if col not in m.columns:
+            continue
+        hit = m[m[col] == True]  # noqa: E712
+        miss = m[m[col] != True]  # noqa: E712
+        row = {"規則": label, "支持度": len(hit)}
+        for outcome in ("ret_ann_90", "max_drawdown_90"):
+            h = pd.to_numeric(hit[outcome], errors="coerce").dropna()
+            mi = pd.to_numeric(miss[outcome], errors="coerce").dropna()
+            key = "中位數" + ("ret90" if outcome == "ret_ann_90" else "dd90")
+            if len(h) < 3 or len(mi) < 3:
+                row[key] = None
+                row["p(" + key + ")"] = None
+                continue
+            row[key] = round(float(h.median()) - float(mi.median()), 3)
+            try:
+                u, pv = mannwhitneyu(h, mi, alternative="two-sided")
+                row["p(" + key + ")"] = round(float(pv), 4)
+            except Exception:
+                row["p(" + key + ")"] = None
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def main():
     alerts = pd.read_csv(DATA / "alerts.csv", dtype={"stock_code": str},
                          encoding="utf-8-sig")
@@ -66,6 +99,7 @@ def main():
 
     t_crash = lift_table(alerts, oc, "crash_flag", base_crash)
     t_tail = lift_table(alerts, oc, "ret_ann_30", base_tail30)
+    t_cont = continuous_table(alerts, oc)
 
     lines = ["# rule_validation.md — 規則實證校準（lift表）", "",
              f"樣本：{len(alerts)}事件（有結局數據者入表）", "",
@@ -75,6 +109,8 @@ def main():
              t_crash.to_markdown(index=False), "",
              "## 結果二：T+30回報<=-30%（陰跌尾）", "",
              t_tail.to_markdown(index=False), "",
+             "## 結果三：連續outcome（中位數差＋Mann-Whitney U）", "",
+             t_cont.to_markdown(index=False), "",
              "## 判讀", "",
              "- lift>=1.5：規則有增量訊號，保留",
              "- lift<1.5：砍走或重設門檻（Claude覆核建議）",

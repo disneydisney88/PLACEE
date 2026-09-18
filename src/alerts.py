@@ -94,13 +94,13 @@ def rule_r2_family(group: pd.DataFrame):
     g = group[group["placee_type"] == "個人"]
     if g.empty:
         return False, False, False, False, None
-    has_computed = (group.get("pct_enlarged_source") == "COMPUTED").any() \
-        if "pct_enlarged_source" in group.columns else False
+    # 三級制（Claude覆核二）：EXPLICIT/EXACT_COMPUTED可餵R2；ESTIMATED→candidate
+    FEED = {"EXPLICIT", "EXACT_COMPUTED"}
 
     def _pcts(df):
-        p = df[(df["pct_enlarged"].notna())]
+        p = df[df["pct_enlarged"].notna()]
         if "pct_enlarged_source" in df.columns:
-            p = p[p["pct_enlarged_source"] == "EXPLICIT"]
+            p = p[p["pct_enlarged_source"].isin(FEED)]
         return p["pct_enlarged"].astype(float)
 
     p = _pcts(g)
@@ -111,17 +111,19 @@ def rule_r2_family(group: pd.DataFrame):
         if mean > 0 and p.max() < 5.0 and (p.std(ddof=0) / mean) < 0.05:
             r2b = True
     r2c = bool(len(p) and p.max() < 5.0 and p.sum() >= 10.0)
-    # COMPUTED pct 命中任何形態 → 只做候選，唔入 alert_score
+    # ESTIMATED pct（或舊COMPUTED標記）命中任何形態 → 只做候選，唔入 alert_score
     cand = False
-    if has_computed:
-        pc = g[g["pct_enlarged"].notna()]["pct_enlarged"].astype(float)
-        cand = bool(len(pc) and (
-            ((pc >= 4.0) & (pc < 5.0)).any()
-            or (len(pc) >= 2 and pc.max() < 5.0
-                and pc.mean() > 0 and pc.std(ddof=0) / pc.mean() < 0.05)
-            or (pc.max() < 5.0 and pc.sum() >= 10.0)))
-    note = (f"n={len(p)} explicit" if (r2a or r2b or r2c) else
-            ("COMPUTED pct命中(候選)" if cand else None))
+    pc = g[(g["pct_enlarged"].notna())]
+    if "pct_enlarged_source" in pc.columns:
+        pc = pc[pc["pct_enlarged_source"].isin(["ESTIMATED", "COMPUTED"])]
+    pc = pc["pct_enlarged"].astype(float)
+    cand = bool(len(pc) and (
+        ((pc >= 4.0) & (pc < 5.0)).any()
+        or (len(pc) >= 2 and pc.max() < 5.0
+            and pc.mean() > 0 and pc.std(ddof=0) / pc.mean() < 0.05)
+        or (pc.max() < 5.0 and pc.sum() >= 10.0)))
+    note = (f"n={len(p)} explicit/exact" if (r2a or r2b or r2c) else
+            ("ESTIMATED pct命中(候選)" if cand else None))
     return r2a, r2b, r2c, cand, note
 
 

@@ -83,19 +83,15 @@ def load_reorg_factors() -> pd.DataFrame:
 
 
 def adjusted_series(prices: pd.DataFrame, reorgs: pd.DataFrame) -> pd.DataFrame:
-    """加 adj_close 欄：生效日前價格乘以累積factor。"""
+    """加 adj_close 欄。
+
+    ⚠️ 2026-09-18晚修正：實測 hk_prices_master（tencent源）本身已係連續序列
+    （02113合股生效日8.9→9.28無跳空、00248/00309/01894同樣連續），
+    再乘合股因子＝二次調整，會製造假-95%日（33宗假crash）。
+    故此處不再套用合股因子；reorg因子只留作股數換算（CCASS%）用途。
+    """
     df = prices.copy()
     df["adj_close"] = df["close"]
-    if reorgs is None or reorgs.empty:
-        return df
-    for code, grp in reorgs.groupby("code"):
-        idx = df.index[df["code"] == code]
-        if len(idx) == 0:
-            continue
-        cum = 1.0
-        for _, r in grp.sort_values("effective").iterrows():
-            mask = df.loc[idx, "date"] < pd.Timestamp(r["effective"])
-            df.loc[idx[mask.values], "adj_close"] *= r["factor"]
     return df
 
 
@@ -116,6 +112,7 @@ def outcome_row(series: pd.DataFrame, t0: int, ann: dt.date,
     out = {"ret_ann_30": None, "ret_ann_60": None, "ret_ann_90": None,
            "ret_comp_13": None, "ret_comp_30": None, "ret_comp_60": None,
            "max_drawdown_90": None, "crash_flag": False, "crash_date": None,
+           "crash_suspect_tick": None,
            "vol_spike_ratio": None, "price_base": None,
            "price_base_prev": None, "turnover_median_prev90": None, "n_days": n}
     if t0 < 0:
@@ -145,14 +142,25 @@ def outcome_row(series: pd.DataFrame, t0: int, ann: dt.date,
                 break
     # 90日內最大回撤（以T0收市為基準）＋單日>50%崩盤
     end = min(t0 + 90, n - 1)
+    # 壞tick清潔：針狀插針（翌日收復至插針前80%以上）＝來源數據基準錯亂；真崩盤跌完唔會即刻收復
+    # （02113 9-14「0.455」：合股生效日來源混用raw/調整口徑，9.28>8.9反證非真跌）
+    clean = list(closes)
+    suspect_days = []
+    for i in range(max(t0, 1), end):
+        if (i >= 1 and clean[i] > 0 and clean[i - 1] > 0
+                and clean[i] <= 0.5 * clean[i - 1]
+                and clean[i + 1] >= 0.8 * clean[i - 1]):
+            suspect_days.append((dates[i].isoformat(), clean[i]))
+            clean[i] = clean[i + 1]
     if end > t0 and p0:
-        seg = closes[t0:end + 1]
+        seg = clean[t0:end + 1]
         out["max_drawdown_90"] = round(min(seg) / p0 - 1, 4)
-    prev = series["close"].astype(float).shift(1)
+    out["crash_suspect_tick"] = ";".join(d for d, _ in suspect_days) or None
+    prev_c = pd.Series(clean).shift(1)
     for i in range(max(t0, 1), end + 1):
-        pc = prev.iloc[i]
-        if pc and pc > 0:
-            r = closes[i] / pc - 1
+        pc = prev_c.iloc[i]
+        if pd.notna(pc) and pc > 0:
+            r = clean[i] / pc - 1
             if r < -0.5:
                 out["crash_flag"] = True
                 out["crash_date"] = dates[i].isoformat()
@@ -221,7 +229,7 @@ def main():
             "price_base", "price_base_prev",
             "ret_ann_30", "ret_ann_60", "ret_ann_90",
             "ret_comp_13", "ret_comp_30", "ret_comp_60",
-            "max_drawdown_90", "crash_flag", "crash_date",
+            "max_drawdown_90", "crash_flag", "crash_date", "crash_suspect_tick",
             "vol_spike_ratio", "turnover_median_prev90",
             "price_source", "fail_reason"]
     with open(DATA / "outcomes.csv", "w", encoding="utf-8-sig", newline="") as f:

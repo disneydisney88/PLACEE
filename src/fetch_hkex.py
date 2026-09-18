@@ -263,19 +263,26 @@ def process_event(ev: dict, state: dict, dry: bool = False) -> list[dict]:
                  'parse_confidence': 'MED',
                  'fail_reason': 'NO_NAMED_PLACEE(泛稱定義冇具名)'}]
 
+    enlarged_total = nums.get('enlarged_issued_total')
     rows_out = []
     for pr in src['rows']:
         sh = label_shares(pr['placee_label'])
         pct = None
-        derived = False
+        pct_source = None
         mpct = re.search(
             re.escape(pr['placee_label'].replace(' ', '')) +
             r'[^。\n]{0,200}?擴大後[^。\n]{0,60}?約?\s*([\d.]+)\s*%', text)
         if mpct:
             pct = float(mpct.group(1))
+            pct_source = 'EXPLICIT'
+        elif sh and enlarged_total and enlarged_total > 0 and sh <= enlarged_total:
+            # 股數÷公告載明擴大後股本：純除法零誤差（Claude覆核二·#3）
+            pct = round(sh / enlarged_total * 100, 2)
+            pct_source = 'EXACT_COMPUTED'
         elif sh and total_shares and agg_pct:
+            # 總%×個股/總股數：受總%四捨五入影響（±0.05pt）
             pct = round(agg_pct * sh / total_shares, 2)
-            derived = True
+            pct_source = 'ESTIMATED'
         below5 = (None if pct is None else (pct < 5.0))
         snip = pd.snippet_from(text, pr['placee_name']) if pr['placee_name'] else ''
         rows_out.append({**base,
@@ -285,12 +292,11 @@ def process_event(ev: dict, state: dict, dry: bool = False) -> list[dict]:
                          'beneficial_owner': pr['beneficial_owner'],
                          'shares': sh, 'price': price, 'price_source': price_source,
                          'pct_enlarged': pct,
-                         'pct_enlarged_source': ('EXPLICIT' if (pct is not None and not derived)
-                                                 else ('COMPUTED' if derived else None)),
+                         'pct_enlarged_source': pct_source,
                          'below_5pct': below5,
                          'independent_declared': pr['independent_declared'],
                          'snippet': snip,
-                         'parse_confidence': 'MED' if (derived or not sh) else conf,
+                         'parse_confidence': 'MED' if (pct_source == 'ESTIMATED' or not sh) else conf,
                          'fail_reason': None})
     return rows_out
 
