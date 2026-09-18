@@ -51,8 +51,13 @@ NAME_BLOCKLIST = [
 
 
 def scrub_placees(path: pathlib.Path):
-    """placees.csv 原地洗掃：機構名誤配嘅placee_name清空＋記錄原因。"""
+    """placees.csv 原地洗掃：機構名誤配清空＋完全重複行去重＋記錄原因。"""
     df = pd.read_csv(path, dtype={"stock_code": str}, encoding="utf-8-sig")
+    n0 = len(df)
+    key = ["event_id", "ann_date", "stock_code", "placee_label",
+           "placee_name", "shares", "source_url"]
+    df = df.drop_duplicates(subset=[c for c in key if c in df.columns], keep="first")
+    n_dupes = n0 - len(df)
     mask = df["placee_name"].fillna("").apply(
         lambda n: any(b.lower() in str(n).lower() for b in NAME_BLOCKLIST))
     n = int(mask.sum())
@@ -61,8 +66,8 @@ def scrub_placees(path: pathlib.Path):
         df.loc[mask, "placee_type"] = "UNKNOWN"
         df["fail_reason"] = df["fail_reason"].astype(object)
         df.loc[mask, "fail_reason"] = "PLACEE_NAME_SCRUBBED(定義body為泛稱/機構)"
-        df.to_csv(path, index=False, encoding="utf-8-sig")
-    return n
+    df.to_csv(path, index=False, encoding="utf-8-sig")
+    return n, n_dupes
 
 
 def load_inputs():
@@ -177,6 +182,6 @@ if __name__ == "__main__":
     df = pd.read_csv(src, dtype={"stock_code": str}, encoding="utf-8-sig")
     df["case_tag"] = df["stock_code"] + "@" + df["ann_date"].astype(str)
     df.to_csv(src, index=False, encoding="utf-8-sig")
-    n = scrub_placees(src)
-    print(f"洗掃誤配承配人名：{n}行", flush=True)
+    n_scrub, n_dupes = scrub_placees(src)
+    print(f"洗掃誤配承配人名：{n_scrub}行；去重重複行：{n_dupes}行", flush=True)
     main()
