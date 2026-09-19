@@ -76,3 +76,13 @@ Render Dashboard → New + → Web Service → Existing Repo → disneydisney88/
 ## git log（部署相關）
 
 見 `git log --oneline`：`[P1]`、`[P2]`、`[P3]`、`[P4]` 四個commit。
+
+## 最終 git log（部署鏈）
+
+```
+45c9568 [P4] deploy log + README (cloud form fill + API + MCP)
+a816bce [P3] registry API endpoints + MCP wrapper + hard tests (付尚輝/COMBO_BSGS all pass)
+d83dcfc [P2] Drive sync via G: desktop (sync_drive.ps1) + daily schedule note
+9dedbc7 [P1] Streamlit Cloud entrypoint shim + split requirements + data strategy + untrack cookies/logs
+```
+敏感檔追蹤檢查：無（webb_cookie.txt / checkpoints/ / *.log 全部已退出）。
