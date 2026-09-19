@@ -5,6 +5,7 @@
 DB：data/registry.db（隨repo；/registry/reload可重開）
 """
 import os
+import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -60,16 +61,29 @@ def meta():
 
 @app.get("/registry/name")
 def registry_name(q: str = Query(..., min_length=1)):
-    """承配人姓名模糊查詢（中英文；name_key已做繁簡＋稱謂正規化）。"""
-    like = f"%{q}%"
+    """承配人姓名模糊查詢（繁簡自動歸一＋稱謂可省略）。"""
+    variants = {q}
+    try:
+        import opencc
+        cc = opencc.OpenCC("s2t")
+        variants.add(cc.convert(q))
+    except Exception:
+        pass
+    clauses, args = [], []
+    for v in list(variants):
+        v2 = re.sub(r"(先生|女士|小姐)$", "", v.strip())
+        for cand in {v, v2}:
+            clauses.append("placee_name LIKE ?")
+            args.append(f"%{cand}%")
+    where = " OR ".join(clauses)
     return rows(
-        """SELECT placee_name, placee_type, stock_code, stock_name, ann_date,
+        f"""SELECT placee_name, placee_type, stock_code, stock_name, ann_date,
                   placee_label, shares, price, pct_enlarged, pct_enlarged_source,
-                  below_5pct, completion_date, alert_score,
+                  below_5pct, completion_date, alert_score, go_ref, superseded,
                   source_url, snippet
            FROM v_name_search
-           WHERE placee_name LIKE ? OR placee_name LIKE ?
-           ORDER BY ann_date DESC""", (like, like))
+           WHERE {where}
+           ORDER BY ann_date DESC""", tuple(args))
 
 
 @app.get("/registry/broker")

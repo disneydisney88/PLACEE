@@ -166,6 +166,20 @@ def parse_ann(pdf_path: pathlib.Path, ev: dict, row: dict) -> list[dict]:
     return out
 
 
+def extract_share_table(text: str) -> dict:
+    """正文認購人認購表：『認購人一 16,125,000 5,000,000 6.15% ...』
+    → {認購人一: {shares, pct_first}}。首數字=認購股數。"""
+    out = {}
+    for ln in text.splitlines():
+        m = re.match(
+            r'^\s*(認購人[一二三四五六七八九十]+)\s+([\d,]{6,})\s+([\d,]{5,})\s+([\d.]+)%', ln)
+        if m:
+            out[m.group(1)] = {'shares': int(m.group(2).replace(',', '')),
+                               'payment': int(m.group(3).replace(',', '')),
+                               'pct_first': float(m.group(4))}
+    return out
+
+
 def process(ev: dict, st: dict) -> list[dict]:
     key = ev['go_ref']
     if st.get(key, {}).get('status') == 'done':
@@ -196,6 +210,17 @@ def process(ev: dict, st: dict) -> list[dict]:
         for r in all_rows:
             if r.get('placee_name'):
                 r['superseded'] = 0 if r['event_id'] in latest_eid else 1
+    # 逐名股數表（認購人X + 數字行）——最遲出現者為準
+    share_tables = {}
+    for row in anns:
+        try:
+            pdf = hx.download_pdf(row['pdf_url'])
+        except Exception:
+            continue
+        text, _ = pd.extract_text(pdf)
+        st_tbl = extract_share_table(text)
+        if st_tbl:
+            share_tables = st_tbl  # 愈後愈新（完成公告最權威）
     # 替代偵測：「新認購人三」句式（WU LAN退出、GAO JIANLONG頂上案例）
     # 每份公告text搵 新(認購人|承配人|投資者)X + 鄰近姓名 → 新row；
     # 同號原label行 superseded=1
@@ -265,6 +290,15 @@ def process(ev: dict, st: dict) -> list[dict]:
                 'parse_confidence': 'MED', 'fail_reason': None,
             })
             break  # 每份公告每個label只報一次
+    # 逐名股數：share_tables 匹配 label；替代者（新認購人三）繼承原號股數（相同數目）
+    for r in all_rows:
+        lab = str(r.get('placee_label') or '').replace(' ', '').split('(')[0]
+        if not lab or r.get('shares'):
+            continue
+        m2 = re.match(r'新(?:認購人|承配人)([一二三四五六七八九十]+)', lab)
+        base_lab = ('認購人' + m2.group(1)) if m2 else lab
+        if base_lab in share_tables and share_tables[base_lab].get('shares'):
+            r['shares'] = share_tables[base_lab]['shares']
     st[key] = {'status': 'done', 'n_anns': len(anns), 'n_rows': len(all_rows)}
     save_state(st)
     return all_rows
