@@ -44,13 +44,20 @@ RE_EXCLUDE = re.compile(r'月報表|週報表|周報表|業績|中期報告|年�
 
 def load_events() -> list[dict]:
     rows = []
+    seen = set()
     for fname, ann_type in [('配股事件20260831.csv', '配股'),
-                            ('供股事件20260831.csv', '供股')]:
+                            ('供股事件20260831.csv', '供股'),
+                            # DT 新版日檔（同schema，增量併入，去重）
+                            ('dt_placing_20260919.csv', '配股')]:
         p = DATA / 'input' / fname
+        if not p.exists():
+            p = pathlib.Path(r'C:\data\HKSTOCKDB\dropin\dt_events') / fname
+        if not p.exists():
+            continue
         with open(p, encoding='utf-8-sig', newline='') as f:
             for i, r in enumerate(csv.DictReader(f)):
-                code = re.match(r'(\d+)\.hk', r.get('代號', '') or '')
-                if not code:
+                m = re.match(r'(\d+)\.hk', r.get('代號', '') or '')
+                if not m:
                     continue
                 d = None
                 md = re.match(r'(\d{2})/(\d{2})/(\d{2})', r.get('公佈日', '') or '')
@@ -60,11 +67,15 @@ def load_events() -> list[dict]:
                         d = dt.date(yy, int(md.group(2)), int(md.group(1)))
                     except ValueError:
                         pass
+                eid = f"{ann_type}_{r.get('代號','')}_{r.get('公佈日','')}"
+                if eid in seen:
+                    continue  # dt_placing 与 0831 版重叠去重
+                seen.add(eid)
                 rows.append({
-                    'event_id': f"{ann_type}_{r.get('代號','')}_{r.get('公佈日','')}",
+                    'event_id': eid,
                     'input_row': i + 2,
                     'source_file': fname,
-                    'stock_code': code.group(1).zfill(5),
+                    'stock_code': m.group(1).zfill(5),
                     'stock_name': r.get('名稱', ''),
                     'ann_date': d,
                     'ann_type_input': r.get('配售方式', ''),
