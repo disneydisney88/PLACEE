@@ -196,6 +196,75 @@ def process(ev: dict, st: dict) -> list[dict]:
         for r in all_rows:
             if r.get('placee_name'):
                 r['superseded'] = 0 if r['event_id'] in latest_eid else 1
+    # 替代偵測：「新認購人三」句式（WU LAN退出、GAO JIANLONG頂上案例）
+    # 每份公告text搵 新(認購人|承配人|投資者)X + 鄰近姓名 → 新row；
+    # 同號原label行 superseded=1
+    cn = '一二三四五六七八九十'
+    for row in anns:
+        try:
+            pdf = hx.download_pdf(row['pdf_url'])
+        except Exception:
+            continue
+        text, _ = pd.extract_text(pdf)
+        for m in re.finditer(
+                r'新(?:認購人|承配人|投資者|認購方)([一二三四五六七八九十]+|[A-Z])', text):
+            lab_new = f"新認購人{m.group(1)}"
+            seg = ''
+            # 首選緊貼結構：與{姓名}（「新認購人X」）訂立
+            name = None
+            tight = re.search(
+                r'(?:與|和|同)\s*([^，。；\n]{2,60}?)\s*（「?新(?:認購人|承配人|投資者|認購方)'
+                + re.escape(m.group(1)) + r'」?）', text)
+            if tight:
+                name = tight.group(1).strip()
+                mp = (pd.RE_PERSON_ROMAN.search(name) or pd.RE_PERSON.search(name))
+                if mp:
+                    g1 = re.sub(r'\s+', ' ', mp.group(1)).strip()
+                    name = f"{g1}{mp.group(2)}"
+            else:
+                seg = text[max(0, m.start() - 400):m.end() + 400]
+                mp = pd.RE_PERSON_ROMAN.search(seg) or pd.RE_PERSON.search(seg)
+                if mp:
+                    g1 = re.sub(r'\s+', ' ', mp.group(1)).strip()
+                    name = f"{g1}{mp.group(2)}"
+                else:
+                    me = pd.RE_ENTITY.search(seg) or pd.RE_CN_ENTITY.search(seg)
+                    if me:
+                        name = re.sub(r'\s+', ' ', me.group(1)).strip().rstrip('，,')
+            if not name:
+                continue
+            orig_lab = f"認購人{m.group(1)}"
+            md2 = re.match(r'(\d{2})/(\d{2})/(\d{4})', row['date'])
+            ann_iso = (dt.date(int(md2.group(3)), int(md2.group(2)),
+                               int(md2.group(1))).isoformat() if md2 else None)
+            for r in all_rows:
+                lab_stripped = str(r.get('placee_label', '')).replace(' ', '')
+                if (r.get('ann_date') and ann_iso
+                        and r['ann_date'] < ann_iso
+                        and lab_stripped.startswith(orig_lab)):
+                    r['superseded'] = 1
+            all_rows.append({
+                'go_ref': ev['go_ref'], 'go_name': ev['go_name'],
+                'months_after_go': None, 'superseded': 0,
+                'ann_title': row['title'][:120],
+                'event_id': f"PGO_{ev['stock_code']}_{row['date']}_{lab_new}",
+                'input_row': ev['input_row'], 'source_file': '全購事件20260831.csv',
+                'stock_code': ev['stock_code'], 'stock_name': ev['stock_name'],
+                'ann_date': None, 'ann_type': '認購(替代)',
+                'placee_label': lab_new, 'placee_name': name,
+                'placee_type': '個人' if re.search(r'先生|女士', name) else (
+                    '公司' if re.search(r'有限公司|LIMITED|LTD', name, re.I) else 'UNKNOWN'),
+                'beneficial_owner': None, 'shares': None, 'price': None,
+                'price_source': None, 'pct_enlarged': None,
+                'pct_enlarged_source': None, 'below_5pct': None, 'lockup': None,
+                'independent_declared': None,
+                'completion_date': (all_rows[0].get('completion_date')
+                                    if all_rows else None),
+                'source_url': row['pdf_url'],
+                'snippet': re.sub(r'\s+', ' ', seg[:200]),
+                'parse_confidence': 'MED', 'fail_reason': None,
+            })
+            break  # 每份公告每個label只報一次
     st[key] = {'status': 'done', 'n_anns': len(anns), 'n_rows': len(all_rows)}
     save_state(st)
     return all_rows

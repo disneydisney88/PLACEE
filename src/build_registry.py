@@ -48,6 +48,12 @@ def main():
     rp = pd.read_csv(DATA / "repeat_placees.csv", encoding="utf-8-sig")
     rp.to_sql("repeat_placees", con, if_exists="replace", index=False)
 
+    pgp = DATA / "post_go_placees.csv"
+    if pgp.exists():
+        pg = pd.read_csv(pgp, dtype={"stock_code": str}, encoding="utf-8-sig")
+        pg.to_sql("post_go_placees", con, if_exists="replace", index=False)
+        con.execute("CREATE INDEX IF NOT EXISTS idx_pg_name ON post_go_placees(placee_name)")
+
     # 視圖：姓名搜尋（含結局）
     con.execute("""
     CREATE VIEW v_name_search AS
@@ -62,8 +68,10 @@ def main():
     WHERE p.placee_name IS NOT NULL AND p.placee_name != ''
     """)
     con.commit()
-    n = {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-         for t in ["placees", "outcomes", "wh_flags", "alerts", "repeat_placees"]}
+    tables = ["placees", "outcomes", "wh_flags", "alerts", "repeat_placees"]
+    if con.execute("SELECT name FROM sqlite_master WHERE name='post_go_placees'").fetchone():
+        tables.append("post_go_placees")
+    n = {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in tables}
     print("registry.db:", n, flush=True)
     con.close()
 

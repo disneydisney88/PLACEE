@@ -100,8 +100,14 @@ def registry_stock(code: str):
     alert = rows("SELECT * FROM alerts WHERE stock_code=?", (code,))
     flags = rows("SELECT * FROM wh_flags WHERE stock_code=?", (code,))
     outcome = rows("SELECT * FROM outcomes WHERE stock_code=?", (code,))
+    post_go = rows(
+        """SELECT go_ref, go_name, ann_date, months_after_go, superseded,
+                  ann_title, placee_label, placee_name, placee_type,
+                  shares, completion_date, source_url
+           FROM post_go_placees WHERE stock_code=? ORDER BY ann_date""", (code,))
     return {"stock_code": code, "events": events, "placees": placees,
-            "alerts": alert, "wh_flags": flags, "outcomes": outcome}
+            "alerts": alert, "wh_flags": flags, "outcomes": outcome,
+            "post_go": post_go}
 
 
 @app.get("/registry/alerts")
@@ -143,6 +149,26 @@ def registry_crash(days: int = 30, threshold: float = -0.5):
         r["within_days_param"] = days
     return {"note": "02113@2026-09-02價格窗至09-18（crash_flag=False為數據窗所限，非安全訊號）",
             "rows": out}
+
+
+@app.get("/registry/post_go")
+def registry_post_go(months: int = 12):
+    """GO（全購要約）完成後N個月內出現嘅承配人——「接手人網絡」。
+
+    按出現次數排序；superseded=1 為中途退出/被替代記錄（保留做網絡線索）。
+    """
+    return rows(
+        """SELECT placee_name, placee_type, COUNT(*) n_cases,
+                  GROUP_CONCAT(DISTINCT stock_code) stocks,
+                  GROUP_CONCAT(DISTINCT go_ref) go_refs,
+                  MIN(months_after_go) first_months_after_go,
+                  MAX(CASE WHEN superseded = 0 OR superseded IS NULL
+                           THEN 0 ELSE 1 END) ever_superseded
+           FROM post_go_placees
+           WHERE placee_name IS NOT NULL AND placee_name != ''
+             AND (months_after_go IS NULL OR months_after_go <= ?)
+           GROUP BY placee_name
+           ORDER BY n_cases DESC, placee_name""", (months,))
 
 
 @app.post("/registry/reload")
