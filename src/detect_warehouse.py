@@ -32,7 +32,37 @@ COMBO = ("B01666", "B02014")  # 寶新 + 粵商國際
 def load_daily() -> pd.DataFrame:
     df = pd.read_csv(DAILY_CSV, dtype={"code": str, "participant_id": str})
     df["date"] = pd.to_datetime(df["date"])
-    return df.sort_values(["code", "date"])
+    df = df.sort_values(["code", "date"])
+    # 本地MySQL來源行冇pct（webb dump holdings無%欄）——用月度股本panel計
+    n_null = int(df["pct"].isna().sum())
+    if n_null and len(df):
+        panel_p = ROOT / "data" / "input" / "shares_outstanding_panel_X0.csv"
+        if panel_p.exists():
+            pan = pd.read_csv(panel_p, dtype={"code": str}, encoding="utf-8-sig")
+            pan["code"] = pan["code"].str.zfill(5)
+            pan = pan[(pan["share_class"] == "TOTAL") & (pan["shares_outstanding"] > 0)]
+            pan["month"] = pan["report_month"].astype(str).str[:7]
+            issued = {(r["code"], r["month"]): int(r["shares_outstanding"])
+                      for _, r in pan.iterrows()}
+            def calc_pct(r):
+                if pd.notna(r["pct"]) or pd.isna(r["shares"]) or r["shares"] <= 0:
+                    return r["pct"]
+                key = (r["code"], str(r["date"])[:7])
+                tot = issued.get(key)
+                # 當月冇panel就借前後月（carry-forward簡化）
+                if tot is None:
+                    y, m = int(key[5:7]), int(key[:4])
+                    for dm in (-1, 1, -2, 2):
+                        mm = m + dm
+                        yy = y + (mm - 1) // 12
+                        mm = (mm - 1) % 12 + 1
+                        tot = issued.get((r["code"], f"{yy}-{mm:02d}"))
+                        if tot:
+                            break
+                return round(r["shares"] / tot * 100, 4) if tot else None
+            df["pct"] = df.apply(calc_pct, axis=1)
+            print(f"pct由shares/股本panel計算: {n_null}行", flush=True)
+    return df
 
 
 def detect_event(df_code: pd.DataFrame, ann, combo_ids_present: dict) -> list[dict]:

@@ -72,6 +72,9 @@ RE_NEWDEF = re.compile(r'[「『]\s*[^」』]{1,20}?\s*[」』]')
 RE_PAGE_NO = re.compile(r'^\s*[-–—\d]{1,4}\s*$')
 RE_CJK_NAME = re.compile(r'^[\u4e00-\u9fff·•]{2,6}$')
 RE_PERSON = re.compile(r'([\u4e00-\u9fff]{2,6})\s*(先生|女士)')
+# 羅馬化姓名（WOO POH SUN先生 / WU LAN女士）——H股公司公告常見
+RE_PERSON_ROMAN = re.compile(
+    r"([A-Z][A-Za-z]*(?:['\- ][A-Z][A-Za-z]*){0,4})\s*(先生|女士|小姐)")
 RE_ENTITY = re.compile(
     r'([A-Za-z][A-Za-z0-9\.\,\s&\-\(\)]{2,80}?(?:LIMITED|LTD\.?|INC\.?|COMPANY|CORPORATION|CORP\.?|HOLDINGS|GROUP|CAPITAL|INVESTMENT(?:S)?|SECURITIES|ASSET(?:S)?(?: MANAGEMENT)?)\b)',
     re.I)
@@ -133,12 +136,13 @@ def _clean_lines(text: str) -> list[str]:
 
 
 def find_definition_section(lines: list[str]) -> tuple[int, int]:
-    """回傳釋義段起止行號。起點=釋義/詞彙標題行；終點=文件尾或「承董事會命」。"""
+    """回傳釋義段起止行號。起點=釋義/詞彙標題行（容許「IX. 釋義」式前綴）；
+    終點=文件尾或「承董事會命」。"""
     start = -1
     for i, ln in enumerate(lines):
         s = ln.strip().replace(' ', '').rstrip('：:')
         if s in ('釋義', '詞彙', '釋義及詞彙', '定義及釋義', '定義') or \
-           s.startswith('釋義') and len(s) <= 6 or \
+           (s.endswith('釋義') and len(s) <= 12) or \
            re.match(r'^於本公告內，除非文義另有所指', s) or \
            re.match(r'^本公告內，除非文義另有所指', s) or \
            re.match(r'^除文義另有所指外', s):
@@ -215,6 +219,10 @@ def _classify(body: str) -> tuple[str, str, str]:
         return '公司', nm, bene
     if mp:
         return '個人', _strip_conn(mp.group(1)) + mp.group(2), bene
+    mr = RE_PERSON_ROMAN.search(body)
+    if mr:
+        nm = re.sub(r'\s+', ' ', mr.group(1)).strip()
+        return '個人', f"{nm}{mr.group(2)}", bene
     # 後備：body 開頭係 2-6 個中文字（00254式：指 鄭凱斌）
     head = _strip_conn(body.strip().rstrip('，。,'))
     if RE_CJK_NAME.match(head) and bene:
@@ -339,6 +347,85 @@ def shares_for_label(text: str, label: str, label_base: str | None = None) -> in
 
 # ---------------------------------------------------------------- 主入口
 
+RE_BODY_LABEL = re.compile(
+    r'^\s*(?:\d{1,2}[\.\)、]\s*)?'
+    r'((?:配售承配人|認購人|承配人|投資者|認購方)(?:[一二三四五六七八九十]+|[A-Z])?)'
+    r'\s*[:：]?\s*(.+)$')
+RE_BODY_CN_NUM = re.compile(r'[一二三四五六七八九十]+')
+
+
+def extract_body_placees(lines: list[str], def_start: int = -1) -> list[dict]:
+    """H股/GEM公告常見無引號body格式（08106式）：
+
+        認購人一
+        WOO POH SUN先生，馬來西亞公民，屬個人...
+        認購人二
+        粵港澳民營投資有限公司，...
+
+    或同行：認購人一 WOO POH SUN先生，...
+    只認「行首label（無「」）＋後續非指文字」；釋義段（def_start起）唔掃。
+    回傳同 placee_defs 形狀嘅 list。
+    """
+    out = []
+    seen = set()
+    # 段落標題誤判黑名單（「認購人背景」「認購人的資料」等唔係人名）
+    HDR_JUNK = ('背景', '的資料', '資料', '詳情', '名單', '一覽')
+    i = 0
+    n = len(lines)
+    while i < n:
+        if def_start >= 0 and i >= def_start:
+            break  # 釋義段交返 def parser
+        ln = lines[i]
+        m = RE_BODY_LABEL.match(ln)
+        if not m:
+            i += 1
+            continue
+        lab, rest = m.group(1), m.group(2).strip()
+        # 定義行（「label」指）唔屬body格式；行內已有「」都skip
+        if '」' in ln or '』' in ln:
+            i += 1
+            continue
+        # 收集body：label同行文字＋之後行直至空行/下一個label/句號結束段
+        body = rest
+        j = i + 1
+        while j < n and len(body) < 220:
+            nxt = lines[j].strip()
+            if not nxt:
+                if body:
+                    break
+                j += 1
+                continue
+            if RE_BODY_LABEL.match(nxt) or RE_NEWDEF.search(nxt):
+                break
+            body += nxt
+            j += 1
+        # 正文句號截斷（描述通常一句完成）
+        p = body.find('。')
+        if p > 0:
+            body = body[:p + 1]
+        if not body or body.startswith('指'):
+            i = max(j, i + 1)
+            continue
+        ptype, name, bene = _classify(body)
+        mi = RE_INDEP.search(body)
+        if name and lab not in seen:
+            if any(junk in name for junk in HDR_JUNK):
+                i = max(j, i + 1)
+                continue
+            seen.add(lab)
+            out.append({
+                'placee_label': lab + (f'({RE_BODY_CN_NUM.search(lab).group(0)})'
+                                       if RE_BODY_CN_NUM.search(lab) else ''),
+                'placee_name': name,
+                'placee_type': ptype,
+                'beneficial_owner': bene,
+                'independent_declared': (mi.group(0).strip()[:200] if mi else None),
+                'def_body': body[:400],
+            })
+        i = max(j, i + 1)
+    return out
+
+
 def _parse_text(text: str, engine: str) -> dict:
     res = {
         'engine': engine, 'scanned': is_scanned(text), 'text': text,
@@ -356,6 +443,10 @@ def _parse_text(text: str, engine: str) -> dict:
     named, anon = placee_defs(defs)
     res['rows'] = named
     res['anon_rows'] = anon
+    # body式無引號承配人（H股公司格式）——補充釋義冇列名嘅個案
+    for b in extract_body_placees(lines, def_start=start):
+        if not any(r['placee_label'] == b['placee_label'] for r in res['rows']):
+            res['rows'].append(b)
     res['defs_all'] = defs
     # 質素分：有承配人 > 有定義 > 亂碼罰分；標籤多過「指」配對 = 雙欄錯位（08245式）
     n_label_lines = sum(1 for ln in lines[start:end] if ln.strip().startswith('「'))

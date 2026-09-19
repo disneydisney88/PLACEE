@@ -67,3 +67,12 @@ SyntaxError: invalid character '＋' (U+FF0B)
 
 **Tier-2餘額（528日期）**：工作清單 `cache/ccass/remaining_work.json`（按crash個案→repeat姓名→其餘排序）；
 自動化每50分鐘一輪：瀏覽器測解封→解封就用導航批量抓→`ingest_browser_results.py`併入→全部完成自動跑下游＋commit＋自我刪除。
+
+## 本地 CCASS MySQL（2026-09-19發現，Tier-2嘅正確長遠路線）
+
+本機 `127.0.0.1:3307`（db=ccass）有 webb-site 全量dump：**holdings/parthold 各2.31億行（2007-06-26→2025-12-24）**，
+schema：holdings(partID, issueID, holding, atDate)＋participants(partID, CCASSID, partName)。
+issueID 同 webb issue_id 同空間（00254=1139✓）。**≤2025-12-24 嘅CCASS查詢一律行本地MySQL，
+唔好刮webb/0xmd**（webb-database已403封我哋IP——懷疑mirror_fetch每秒一req觸發WAF；詳 C:\data\AGENTS.md）。
+`src/backfill_local_mysql.py` 已將佇列內≤2025-12-24嘅8日併入（53行，pct由shares÷月度股本panel計，detect_warehouse已支援）。
+2026年日期（35項）仍需0xmd窗口，自動化每50分鐘續試。

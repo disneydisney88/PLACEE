@@ -53,7 +53,8 @@ def main():
     CREATE VIEW v_name_search AS
     SELECT p.placee_name, p.placee_type, p.stock_code, p.stock_name,
            p.ann_date, p.placee_label, p.shares, p.price, p.pct_enlarged,
-           p.below_5pct, p.lockup, p.completion_date, p.source_url, p.snippet,
+           p.pct_enlarged_source, p.below_5pct, p.lockup, p.completion_date,
+           p.source_url, p.snippet,
            o.ret_ann_30, o.ret_ann_90, o.crash_flag, a.alert_score
     FROM placees p
     LEFT JOIN outcomes o ON o.stock_code = p.stock_code AND o.ann_date = p.ann_date
