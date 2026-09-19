@@ -115,3 +115,52 @@ streamlit run src/app.py
 
 四個頁面：①姓名搜尋（部分匹配＋原文snippet＋來源連結）②券商搜尋（衛星倉flag）③亮燈榜（score/年份/授權篩選）④個案詳情（承配人表＋CCASS持股折線＋收市價＋結局指標）。
 規格要求「所有數字旁必須可點開source_url；冇來源嘅數字唔好顯示」：承配人表每行有「🔗公告」連結欄，冇來源嘅欄位顯示空值。
+
+---
+
+## 雲端部署（Streamlit Cloud + Google Drive + API/MCP）
+
+### Streamlit Cloud 部署表單填法
+
+| 欄位 | 填 |
+|---|---|
+| Repository | `disneydisney88/PLACEE` |
+| Branch | **`main`** |
+| Main file path | **`streamlit_app.py`** |
+| Python version | 3.11 |
+| Secrets | 唔使（registry.db已隨repo；DB>50MB先需要`DRIVE_DB_URL` Secret） |
+
+### Google Drive 備份
+
+- Drive folder：`我的雲端硬碟/PLACEE/data/`（含registry.db＋6個CSV＋詳細README）
+- 同步：`powershell -ExecutionPolicy Bypass -File scripts/sync_drive.ps1`（用G:碟桌面同步，唔使rclone）
+- 每日23:00自動同步：新開一個zcode對話講「每日23:00跑PLACEE同步」即可設置
+
+### Registry API（FastAPI，7個endpoint）
+
+```bash
+pip install -r requirements-api.txt
+uvicorn api_registry:app --port 8765
+# GET /registry/meta | /registry/name?q=付尚輝 | /registry/broker?q=B01666
+# GET /registry/stock/02113 | /registry/alerts?since=2026-01-01
+# GET /registry/repeat | /registry/crash?days=30
+# POST /registry/reload （header X-Token，設PLACEE_API_TOKEN環境變數啟用）
+```
+硬測試：`python test_registry_api.py`（付尚輝repeat✓、02113/00254 COMBO_BSGS✓）
+
+### MCP 接入（Claude Desktop）
+
+`claude_desktop_config.json`：
+```json
+{ "mcpServers": { "placee-registry": {
+    "command": "python",
+    "args": ["C:\Users\klcho\.zcode\workspace\default\hk-placee-registry\mcp_server.py"],
+    "env": { "PLACEE_API_BASE": "http://localhost:8765" } } } }
+```
+7個tool：registry_meta / registry_name / registry_broker / registry_stock /
+registry_alerts / registry_repeat / registry_crash
+
+### Render API 部署（可選，一句設定）
+
+New + → Web Service → disneydisney88/PLACEE → Build: `pip install -r requirements-api.txt`
+→ Start: `uvicorn api_registry:app --host 0.0.0.0 --port $PORT`
