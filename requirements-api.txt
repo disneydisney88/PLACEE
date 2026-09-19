@@ -1,0 +1,5 @@
+# registry API（FastAPI + MCP wrapper）
+fastapi>=0.110
+uvicorn>=0.29
+mcp>=1.0
+requests>=2.31
