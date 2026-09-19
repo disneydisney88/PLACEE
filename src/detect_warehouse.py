@@ -127,6 +127,7 @@ def detect_event(df_code: pd.DataFrame, ann, combo_ids_present: dict) -> list[di
                 if gap <= 10:
                     peak = series.iloc[:i + 1].max()
                     after = series.iloc[i:i + 21]
+                    end_idx = min(i + 21, len(series))
                     if len(after) >= 2:
                         end_val = after.iloc[-1]
                         dump_ratio = (peak - end_val) / peak if peak > 0 else 0
@@ -134,6 +135,16 @@ def detect_event(df_code: pd.DataFrame, ann, combo_ids_present: dict) -> list[di
                         retail_delta = (retail_win.iloc[-1] - retail_win.iloc[0]
                                         if len(retail_win) >= 2 else 0)
                         if dump_ratio > 0.5:
+                            # R7B精化（Claude覆核）：peak>=4%且高水位(>=3%)持有>=60日
+                            # → 長期持倉調整，唔係衛星倉
+                            ge3 = [x for x in series.iloc[i:end_idx] if x >= 3.0]
+                            hold_days = (len(ge3) > 0) and (
+                                (after.index[-1] - idx_list[j]).days >= 60)
+                            if peak >= 4.0 and hold_days:
+                                flevel = "長期持倉調整(非衛星)"
+                            else:
+                                flevel = ("衛星倉派貨" if retail_delta > 2.0
+                                          else "建倉派貨(散戶升幅不足)")
                             flags.append({
                                 "stock_code": df_code["code"].iloc[0],
                                 "event_date": ann,
@@ -147,8 +158,7 @@ def detect_event(df_code: pd.DataFrame, ann, combo_ids_present: dict) -> list[di
                                 "dump_end": after.index[-1].date().isoformat(),
                                 "dump_pct": round(float(dump_ratio * 100), 1),
                                 "retail_delta_pct": round(float(retail_delta), 2),
-                                "flag_level": "衛星倉派貨" if retail_delta > 2.0
-                                              else "建倉派貨(散戶升幅不足)",
+                                "flag_level": flevel,
                             })
                     last_episode_end = i + 21
     return flags

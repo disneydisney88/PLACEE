@@ -287,7 +287,9 @@ def extract_event_numbers(text: str) -> dict:
            'pct_enlarged_aggregate': None, 'completion_date_iso': None,
            'enlarged_issued_total': None}
     compact = re.sub(r'\s+', '', text)
-    mp = RE_PRICE_HKD.search(compact)
+    cands = [m for m in RE_PRICE_HKD.finditer(compact)
+             if '淨' not in compact[max(0, m.start() - 8):m.start()]]
+    mp = cands[0] if cands else RE_PRICE_HKD.search(compact)
     if mp:
         try:
             out['price'] = float(mp.group(1))

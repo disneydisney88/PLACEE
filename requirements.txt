@@ -3,3 +3,6 @@ streamlit>=1.40
 pandas>=2.0
 opencc-python-reimplemented>=0.1.7
 requests>=2.31
+tabulate>=0.9
+pyarrow>=14.0
+openpyxl>=3.1
