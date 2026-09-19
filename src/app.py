@@ -21,8 +21,23 @@ st.set_page_config(page_title="承配人索引庫 hk-placee-registry",
 
 @st.cache_data(ttl="10m")
 def load_placees() -> pd.DataFrame:
-    return pd.read_csv(DATA / "placees.csv", dtype={"stock_code": str},
-                       encoding="utf-8-sig")
+    df = pd.read_csv(DATA / "placees.csv", dtype={"stock_code": str},
+                     encoding="utf-8-sig")
+    # 合併 GO後承配人（post_go_placees）入搜尋範圍
+    pgp = DATA / "post_go_placees.csv"
+    if pgp.exists():
+        try:
+            pg = pd.read_csv(pgp, dtype={"stock_code": str}, encoding="utf-8-sig")
+            for col in df.columns:
+                if col not in pg.columns:
+                    pg[col] = None
+            for col in pg.columns:
+                if col not in df.columns:
+                    df[col] = None
+            df = pd.concat([df, pg[df.columns]], ignore_index=True)
+        except Exception:
+            pass
+    return df
 
 
 @st.cache_data(ttl="10m")

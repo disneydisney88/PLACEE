@@ -55,17 +55,35 @@ def main():
         con.execute("CREATE INDEX IF NOT EXISTS idx_pg_name ON post_go_placees(placee_name)")
 
     # 視圖：姓名搜尋（含結局）
-    con.execute("""
+    has_pg = con.execute(
+        "SELECT name FROM sqlite_master WHERE name='post_go_placees'").fetchone()
+    pg_select = ""
+    if has_pg:
+        pg_select = '''
+        UNION ALL
+        SELECT g.placee_name, g.placee_type, g.stock_code, g.stock_name,
+               g.ann_date, g.placee_label, g.shares, g.price, g.pct_enlarged,
+               g.pct_enlarged_source, g.below_5pct, g.lockup, g.completion_date,
+               g.source_url, g.snippet,
+               NULL, NULL, NULL, NULL,
+               g.go_ref, g.months_after_go, g.superseded
+        FROM post_go_placees g
+        WHERE g.placee_name IS NOT NULL AND g.placee_name != '' '''
+    con.execute(f"""
     CREATE VIEW v_name_search AS
-    SELECT p.placee_name, p.placee_type, p.stock_code, p.stock_name,
-           p.ann_date, p.placee_label, p.shares, p.price, p.pct_enlarged,
-           p.pct_enlarged_source, p.below_5pct, p.lockup, p.completion_date,
-           p.source_url, p.snippet,
-           o.ret_ann_30, o.ret_ann_90, o.crash_flag, a.alert_score
-    FROM placees p
-    LEFT JOIN outcomes o ON o.stock_code = p.stock_code AND o.ann_date = p.ann_date
-    LEFT JOIN alerts a ON a.stock_code = p.stock_code AND a.ann_date = p.ann_date
-    WHERE p.placee_name IS NOT NULL AND p.placee_name != ''
+    SELECT * FROM (
+        SELECT p.placee_name, p.placee_type, p.stock_code, p.stock_name,
+               p.ann_date, p.placee_label, p.shares, p.price, p.pct_enlarged,
+               p.pct_enlarged_source, p.below_5pct, p.lockup, p.completion_date,
+               p.source_url, p.snippet,
+               o.ret_ann_30, o.ret_ann_90, o.crash_flag, a.alert_score,
+               NULL AS go_ref, NULL AS months_after_go, NULL AS superseded
+        FROM placees p
+        LEFT JOIN outcomes o ON o.stock_code = p.stock_code AND o.ann_date = p.ann_date
+        LEFT JOIN alerts a ON a.stock_code = p.stock_code AND a.ann_date = p.ann_date
+        WHERE p.placee_name IS NOT NULL AND p.placee_name != ''
+        {pg_select}
+    ) ORDER BY ann_date DESC
     """)
     con.commit()
     tables = ["placees", "outcomes", "wh_flags", "alerts", "repeat_placees"]

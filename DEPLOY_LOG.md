@@ -86,3 +86,45 @@ d83dcfc [P2] Drive sync via G: desktop (sync_drive.ps1) + daily schedule note
 9dedbc7 [P1] Streamlit Cloud entrypoint shim + split requirements + data strategy + untrack cookies/logs
 ```
 敏感檔追蹤檢查：無（webb_cookie.txt / checkpoints/ / *.log 全部已退出）。
+
+---
+
+## [P7-HOTFIX] 雲端同步＋依賴修復（2026-09-19）
+
+### 1. registry.db 版本
+- DB以<50MB直接commit入repo（DEPLOY_LOG Phase 2決定表）。`git log -- data/registry.db`：
+  最後更新=[P7-HOTFIX] commit f5b102e（含post_go_placees 226行、EXPLICIT pct 51行、02113修正）。
+- DRIVE_DB_URL：唔需要（DB<50MB隨repo）。用戶Reboot Streamlit Cloud app即拉最新main。
+
+### 2. 02113數據修正（MANUAL_SPEC歸零）
+- source_file：MANUAL_SPEC字串 → **hkexnews PDF URL**（2026090202541_c.pdf）
+- price：0.269（淨額錯抓）→ **0.27**（公告載明認購價；parse已修正為避開「淨額」匹配）
+- 驗收：姓名搜尋付尚輝 → 2行（02113+00254），**0行MANUAL_SPEC** ✓
+
+### 3. requirements/runtime
+- requirements.txt 加 tabulate/pyarrow/openpyxl
+- 新增 runtime.txt = python-3.11（Streamlit Cloud表單同樣揀3.11）
+
+### 4. Kingston B01438「衛星倉派貨」解解（00254）
+
+計算輸入（ccass_daily逐日%）：
+- Build：05-15持0.42% → **05-19跳升4.85%**（公告05-28之前9日＝前置部署）
+- 高水位：05-19..06-11持4.85→7.92%，06-12..16回落6.61%
+- Dump：**06-17單日6.61→0.33（-95%）**，之後長期0.19
+- retailΔ：06-12→06-25散戶白名單合計3.26→9.95（**+6.65pt**）
+  - 組成：富途B01955 +2.93、輝立B01345 +1.18、盈透B01590 +1.06、耀才B01668 +0.51、致富+0.31、老虎+0.25、盈立+0.25、微牛+0.21
+
+**判定：唔係誤判**——Kingston係公告前9日埋伏、認購後高水位、一日清倉95%、散戶接火棒，
+完全符合衛星倉定義。R7B新排除條件（peak≥4.0%**且**高水位持有≥60日）實測Kingston
+高水位僅約20個交易日 → **排除條件唔會踢走佢**，flag正確保留。長期持倉調整類
+（如有）會標「長期持倉調整(非衛星)」唔入R7。
+
+### 5. 雲端驗收證據
+
+三張截圖已存 `deploy_evidence/`（本機app localhost:8601與雲端同一份data/＋代碼）：
+1. `1_name_search_fuchinfei.png` — 付尚輝搜尋：2行、02113 source_file＝hkexnews PDF URL、**0行MANUAL_SPEC**
+2. `2_name_search_liu_chiu_heung_08106.png` — 劉朝暉搜尋：**1行命中08106芯化蘭德**（GO後承配人）
+3. `3_broker_dropdown.png` — 券商下拉含B01438（P6後broker），00254 Kingston flag完整顯示
+
+**用戶操作**：Streamlit Cloud app → Manage app → Reboot（表單已填 main/streamlit_app.py 者
+pull f5b102e 後即見上述三項）。雲端URL驗收同樣三項；截圖可重拍。
