@@ -163,3 +163,35 @@ pull f5b102e 後即見上述三項）。雲端URL驗收同樣三項；截圖可�
 - G:\我的雲端硬碟\PLACEE\data\ 与本地 data/ 完全一致（9檔+input/子目錄，檔案大小時間戳吻合）
 - registry.db 行數：placees 777 / outcomes 725 / alerts 725 / post_go_placees 226 / wh_flags 6 / repeat_placees 3
 - R2三級制最終驗證：55行/35宗可餵，02113 R2a+R2b+R2c 全中
+
+---
+
+## [P4.6] DI補測：12宗crash個案 R3/R5/R6（2026-09-20）
+
+### 1. 事件：P4.5證據被pipeline重生成沖走（已永久修復）
+- P4.6進行中發現另一session嘅pipeline重跑（commit 5026698/d5b5f2e）**重新生成alerts.csv，沖走P4.5手改嘅R3/R5/R6_evidence欄**。
+- 修復：實測結果改放**data/di_evidence.csv sidecar**（鍵=stock_code+ann_date），`src/alerts.py`寫出前自動左連接合併——**以後任何pipeline重生成都不會沖走**（重跑驗證：13行證據完整保留）。
+- 教訓：手改生成物會被沖；實測數據必須行sidecar+merge。
+
+### 2. 實測結果（11宗crash事件，全部實測）
+
+| 個案 | R3 | R5 | R6 | 要點 |
+|---|---|---|---|---|
+| 00145 信能低碳 | FALSE | FALSE | FALSE | 3宗全借貸池類（Cheng Lut Tim 1.56%封頂） |
+| **00648 京玖康療** | FALSE | **TRUE** | FALSE | Form1 `IS20260625E00454` 黃杰05-15沽22.25M股@2.20（>>認購價0.28），51.00%→30.30%（貼30%線上停）。惟同一人07-05以同價2.20買入——平手搬倉，非低位獲利離場，evidence已註明 |
+| 01421 恒昌集團(2024) | FALSE | FALSE | FALSE | 2宗1316借貸池（YAO RUNXIONG 3.64%） |
+| 01796 中國數智科技 | FALSE | FALSE | FALSE | 控股股東謝兆凱crash日(04-09)場內沽51.1M股均價0.389（<<3.0），個人層38.61%→27.96%；沽價全低於認購價→R5唔中；場內非場外→R3唔中 |
+| 01894 恒益控股 | FALSE | FALSE | FALSE | 窗口僅1宗且已撤回（withdrawn） |
+| 01961 多牛科技 | FALSE | FALSE | FALSE | 窗口零申報 |
+| 02110 天成控股 | FALSE | FALSE | FALSE | 7宗無沽售（LIN LIN 1101經Form證實係買入） |
+| 02330 中國上城 | FALSE | FALSE | FALSE | 4宗全係承配人28-10買入@0.18（8.33%/8.25%/15.90%） |
+| 02617 藥捷安康－Ｂ(×2) | FALSE | FALSE | FALSE | 38宗零沽售；董事Wu Frank 25.78-26.53%帶內坐貨係攤薄形成（1711無交易）；VC反而在06-08月@11-13.7撈底 |
+| 02685 量化派 | FALSE | FALSE | FALSE | 9宗全係Fosun系crash後買入（07-28 @7.29、08-26 @3.98） |
+
+- **全registry R3/R5/R6唯一TRUE：00254(賀遠帆R5+R6)、02113(鄧林輝R3)、00648(黃杰R5)。**
+- 註：清單頁reason代碼（1201/1101）會誤導——**必須開Form詳情睇原文**（00648/01796兩案清單話買、Form原文係賣；02110相反）。
+
+### 3. 下游
+- `data/di_evidence.csv`（13行）＋`src/alerts.py`合併步驟＋`deploy_evidence/di_p46_crash_notices.json`（原始申報清單）。
+- alerts.csv重生成（725行，30欄，13行有DI證據）；registry.db重建✓；Drive同步✓。
+- crash_cases.csv已由另一session擴至18宗（00362/00653/01010/01872/08087/08426六宗2024-25舊案）——**未做DI**，留待下一輪。

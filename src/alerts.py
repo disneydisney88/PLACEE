@@ -200,6 +200,31 @@ def main():
             "crash_flag": o.get("crash_flag"),
         })
     alert_df = pd.DataFrame(rows)
+
+    # ---- DI實測證據合併（P4.5/P4.6）：data/di_evidence.csv（人手/瀏覽器實測）按
+    # (stock_code, ann_date)左連接；有實測值覆寫NOT_TESTED，證據欄原樣帶入。
+    # 放喺生成流程入面，令alerts.csv重生成都唔會沖走實測結果。
+    di_path = DATA / "di_evidence.csv"
+    if di_path.exists():
+        di = pd.read_csv(
+            di_path, dtype={"stock_code": str,
+                            "R3_offchain_block_25_30": str,
+                            "R5_insider_sell_high": str,
+                            "R6_director_sell_next_day": str},
+            encoding="utf-8-sig")
+        ev_cols = ["R3_evidence", "R5_evidence", "R6_evidence"]
+        val_cols = ["R3_offchain_block_25_30", "R5_insider_sell_high",
+                    "R6_director_sell_next_day"]
+        di = di[["stock_code", "ann_date"] + val_cols + ev_cols]
+        alert_df = alert_df.merge(di, on=["stock_code", "ann_date"],
+                                  how="left", suffixes=("", "_di"))
+        for col in val_cols:
+            d = alert_df[col + "_di"]
+            alert_df[col] = d.where(d.notna(), alert_df[col])
+            alert_df = alert_df.drop(columns=[col + "_di"])
+        n_di = int(alert_df["R3_evidence"].notna().sum())
+        print(f"DI實測證據合併：{n_di}行（data/di_evidence.csv）", flush=True)
+
     alert_df = alert_df.sort_values(["alert_score", "stock_code"],
                                     ascending=[False, True])
     alert_df.to_csv(DATA / "alerts.csv", index=False, encoding="utf-8-sig")
