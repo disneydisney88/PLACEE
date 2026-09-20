@@ -157,3 +157,9 @@ pull f5b102e 後即見上述三項）。雲端URL驗收同樣三項；截圖可�
 ### 4. 下游
 - `alerts.csv`：27→30欄（加R3_evidence/R5_evidence/R6_evidence），其餘724行新欄留空、原欄不變。
 - `python src/build_registry.py` 重建✓（alerts 725行）；`scripts/sync_drive.ps1` 同步✓。
+
+## 最终同步验证（2026-09-20 20:40）
+
+- G:\我的雲端硬碟\PLACEE\data\ 与本地 data/ 完全一致（9檔+input/子目錄，檔案大小時間戳吻合）
+- registry.db 行數：placees 777 / outcomes 725 / alerts 725 / post_go_placees 226 / wh_flags 6 / repeat_placees 3
+- R2三級制最終驗證：55行/35宗可餵，02113 R2a+R2b+R2c 全中

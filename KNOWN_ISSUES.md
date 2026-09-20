@@ -76,3 +76,12 @@ issueID 同 webb issue_id 同空間（00254=1139✓）。**≤2025-12-24 嘅CCAS
 唔好刮webb/0xmd**（webb-database已403封我哋IP——懷疑mirror_fetch每秒一req觸發WAF；詳 C:\data\AGENTS.md）。
 `src/backfill_local_mysql.py` 已將佇列內≤2025-12-24嘅8日併入（53行，pct由shares÷月度股本panel計，detect_warehouse已支援）。
 2026年日期（35項）仍需0xmd窗口，自動化每50分鐘續試。
+
+## R2 三級制最終驗證（2026-09-20）
+
+- **可餵 R2a/b/c 數據**：55行/35宗（EXPLICIT+EXACT_COMPUTED）
+- **實測命中**：02113 世紀集團——認購人A-D各4.17%，R2a+R2b+R2c三條全中（n=4、cv=0、Σ=16.67%）
+- **規則有效性確認**：三級制（EXPLICIT/EXACT_COMPUTED可餵；ESTIMATED只入candidate）下
+  R2有真實支援，唔係空轉。原本「EXPLICIT=0」嘅死局由 words-based extract_table_pcts
+  + EXACT_COMPUTED 三級制一併解決
+- **0xmd 佇列**：459/459 全部完成（17隻股CCASS日度序列入庫）；自動化已刪除
