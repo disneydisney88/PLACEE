@@ -31,6 +31,17 @@ def load_prices() -> pd.DataFrame:
         base = RAW / "hk_prices_master.csv"
     with open(base, encoding="utf-8-sig") as f:
         df = pd.read_csv(f, dtype={"code": str}, on_bad_lines="warn")
+    yg = ROOT / "cache" / "yahoo_gaps.csv"
+    if yg.exists():
+        with open(yg, encoding="utf-8") as f:
+            dfy = pd.read_csv(f, dtype={"code": str})
+        dfy["date"] = pd.to_datetime(dfy["date"], errors="coerce")
+        dfy = dfy.dropna(subset=["date"])
+        for col in df.columns:
+            if col not in dfy.columns:
+                dfy[col] = None
+        df = pd.concat([df, dfy[df.columns]], ignore_index=True)
+        df = df.drop_duplicates(subset=["code", "date"], keep="last")
     bf = ROOT / "cache" / "price_backfill.csv"
     if bf.exists():
         with open(bf, encoding="utf-8-sig") as f:
