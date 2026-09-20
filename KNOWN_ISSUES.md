@@ -6,12 +6,12 @@
 
 | 規則 | 狀態 | 原因 |
 |---|---|---|
-| R3 控股塊場外易手25-29.99% | `NOT_TESTED` | `di.hkex.com.hk`為ASP.NET postback表單，本地直連被WAF擋（403）；webb-site dealings資料唔齊全。風險按規格降級 |
-| R5 既有股東/董事高價離場 | `NOT_TESTED` | 同上（需DI） |
-| R6 利好翌日董事場內減持 | `NOT_TESTED` | 同上（需DI） |
+| R3 控股塊場外易手25-29.99% | 🟡 高警示個案已實測（P4.5，2026-09-20） | 00254=FALSE、02113=**TRUE**（鄧林輝場外認購落28.00%帶）；其餘個案仍`NOT_TESTED`。DI站恢復、經瀏覽器可查（詳DEPLOY_LOG P4.5） |
+| R5 既有股東/董事高價離場 | 🟡 高警示個案已實測（P4.5，2026-09-20） | 00254=**TRUE**（董事賀遠帆05-29場內沽@0.95>認購價0.77）、02113=FALSE（窗口未屆滿至今無沽售）；其餘個案仍`NOT_TESTED` |
+| R6 利好翌日董事場內減持 | 🟡 高警示個案已實測（P4.5，2026-09-20） | 00254=**TRUE**（賀遠帆公告翌日場內減持34.8M股）、02113=FALSE（窗口內無董事申報）；其餘個案仍`NOT_TESTED` |
 | R9 競價U盤異常 | `NOT_TESTED` | 需逐筆/競價數據（規格標明可選） |
 
-**DI若要補做**：可試DisclosureTracker個股頁經瀏覽器（同webb鏡像cookie手法），或手動輸入。本晚未排入。
+**DI補做實錄（P4.5，2026-09-20）**：`di.hkex.com.hk`已恢復（09-19「暫時未能提供」屬站方暫時問題）。正確路線＝瀏覽器經www2.hkexnews.hk入口→DION `NSSrchMethod.aspx`→按上市公司搜尋→List of all notices；**requests直連仍會403，唔好試**。每次抓取間隔≥3秒，全程約10次fetch無封鎖。證據（申報日期/姓名/股數/Form編號/來源URL）已入`alerts.csv`新欄`R3_evidence/R5_evidence/R6_evidence`。
 
 ## 已知解析盲點
 

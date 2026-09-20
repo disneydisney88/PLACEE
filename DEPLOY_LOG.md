@@ -128,3 +128,32 @@ d83dcfc [P2] Drive sync via G: desktop (sync_drive.ps1) + daily schedule note
 
 **用戶操作**：Streamlit Cloud app → Manage app → Reboot（表單已填 main/streamlit_app.py 者
 pull f5b102e 後即見上述三項）。雲端URL驗收同樣三項；截圖可重拍。
+
+---
+
+## [P4.5] DI深挖：高警示個案R3/R5/R6實測（2026-09-20）
+
+### 1. DI站狀態
+- `di.hkex.com.hk` 09-19回「暫時未能提供」→ 09-20實測**恢復正常**（非封鎖，屬站方暫時問題）。
+- 可用路線＝瀏覽器：www2.hkexnews.hk DI入口 → DION `NSSrchMethod.aspx` → 「Search by listed corporation」→ List of all notices（GET URL帶sid/sd/ed參數可直接導航）。表單postback同日期下拉用evaluate設定再`cmdSearch.click()`。
+- 紀律：每次抓取間隔≥3秒；全程約10次fetch，無封鎖、無驗證碼。**requests直連仍會403（WAF照在），自動化必須行瀏覽器**。
+
+### 2. 實測結果（alerts.csv已更新＋新欄R3/R5/R6_evidence，registry.db已重建）
+
+| 個案 | R3 | R5 | R6 | 核心證據 |
+|---|---|---|---|---|
+| 00254 國家聯合資源 | FALSE | **TRUE** | **TRUE** | Form3A `DA20260602E00374`：董事**賀遠帆** 05-29（公告05-28翌交易日）場內沽34,800,000股均價HKD0.95（高0.96）＞認購價0.77，持倉6.21%→0.00%；前置＝`DA20260602E00373` 04-24場外@0.66買入35M股（12.42%）。 |
+| 02113 世紀集團國際 | **TRUE** | FALSE | FALSE | Form1 `IS20260902E00490`：**鄧林輝** 09-01（公告前一日）場外現金@0.134認購225,330,000股，0%→**28.00%**——正落25-29.99%帶、低過30%全面要約線；申報日09-02與公告同日。 |
+
+- 00254賀遠帆形態＝「公告前場外埋伏（0.66）→公告翌日場內高價清倉（0.95）」，R5/R6兩燈齊中，同時解釋06-25崩盤前嘅內部人離場。
+- 00254窗口（02-27..08-26）共13宗申報：付尚輝06-12場外@0.77完成認購58M股（8.58%，即placees.csv第三承配人）；Ji Kaiping/Thousand Joy 14.39%、Guo Peiyuan/Hontin Ocean 9.11%、LI ZIWEI 5.92%——**無任何塊落25-29.99%**→R3=FALSE。
+- 02113窗口（06-04..09-20）僅2宗申報：鄧林輝認購＋09-14「20合1」股本調整（`IS20260915E00640`，225,330,000→11,266,500股，28.00%不變）。0宗沽售、0宗董事申報→R5/R6=FALSE。**窗口後段（至12-01）未屆滿，FALSE僅代表「至今無」**，evidence欄已註明。
+
+### 3. 口徑註
+- 00254認購價＝0.77（placees.csv/公告PDF）；任務書寫0.85——沽售均價0.95兩個口徑都高過，verdict不變。
+- 02113 DI申報均價0.134＝任務書「6.70調整前」嘅調整後對應口徑（6.70÷50=0.134）。
+- alert_score唔變（R3/R5/R6唔入評分，見KNOWN_ISSUES 0b）。
+
+### 4. 下游
+- `alerts.csv`：27→30欄（加R3_evidence/R5_evidence/R6_evidence），其餘724行新欄留空、原欄不變。
+- `python src/build_registry.py` 重建✓（alerts 725行）；`scripts/sync_drive.ps1` 同步✓。
